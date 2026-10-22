@@ -1,0 +1,6 @@
+{
+  "name": "Vitalith",
+  "description": "Personal health record platform by SynthetiQs. All your health records organized into a longitudinal timeline, explained with grounded AI, and ready for care coordination.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
