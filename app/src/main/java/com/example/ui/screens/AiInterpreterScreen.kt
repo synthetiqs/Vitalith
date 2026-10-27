@@ -26,6 +26,8 @@ import com.example.data.model.ChatMessage
 import com.example.data.repository.VitalithRepository
 import com.example.ui.components.CitationPill
 import com.example.ui.components.ClinicalAlertBanner
+import com.example.ui.components.EditorialAiCard
+import com.example.ui.components.FloatingComposer
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -122,94 +124,42 @@ fun AiInterpreterScreen(
         .weight(1f)
         .padding(horizontal = 16.dp),
       contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp)
+      verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
       items(chatMessages, key = { it.id }) { msg ->
-        ChatBubble(msg = msg)
+        EditorialAiCard(message = msg)
       }
     }
 
-    // Suggested Questions Carousel
-    LazyRow(
+    val suggestions = listOf(
+      "Summarize my records & flag anomalies",
+      "How is my A1c trending?",
+      "Review my active medications & interactions",
+      "Prepare summary for my next appointment",
+      "Test emergency symptom triage (chest pain)"
+    )
+
+    // Floating Composer Bar with animated suggestion chips
+    Box(
       modifier = Modifier
         .fillMaxWidth()
-        .background(MaterialTheme.colorScheme.surface)
-        .padding(horizontal = 12.dp, vertical = 6.dp),
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
+        .padding(bottom = 76.dp) // Clearance for floating pill bottom bar
     ) {
-      val suggestions = listOf(
-        "How is my A1c trending?",
-        "Review my active medications & interactions",
-        "Prepare summary for my next appointment",
-        "Test emergency symptom triage (chest pain)"
+      FloatingComposer(
+        query = inputQuery,
+        onQueryChange = { inputQuery = it },
+        onSend = {
+          if (inputQuery.isNotBlank()) {
+            val q = inputQuery
+            inputQuery = ""
+            repository.sendUserMessage(q)
+          }
+        },
+        suggestions = suggestions,
+        onSelectSuggestion = { suggestion ->
+          repository.sendUserMessage(suggestion)
+        }
       )
-      items(suggestions) { suggestion ->
-        Surface(
-          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-          shape = RoundedCornerShape(16.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-          modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable {
-              repository.sendUserMessage(suggestion)
-            }
-        ) {
-          Text(
-            text = suggestion,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-          )
-        }
-      }
-    }
-
-    // Chat Input Bar
-    Surface(
-      color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 4.dp,
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(bottom = 80.dp) // Leave space for bottom bar
-    ) {
-      Row(
-        modifier = Modifier.padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        OutlinedTextField(
-          value = inputQuery,
-          onValueChange = { inputQuery = it },
-          placeholder = { Text("Ask about your labs, meds, encounters...", fontSize = 13.sp) },
-          shape = RoundedCornerShape(20.dp),
-          modifier = Modifier
-            .weight(1f)
-            .testTag("ai_chat_input"),
-          maxLines = 3
-        )
-        IconButton(
-          onClick = {
-            if (inputQuery.isNotBlank()) {
-              val q = inputQuery
-              inputQuery = ""
-              repository.sendUserMessage(q)
-            }
-          },
-          enabled = inputQuery.isNotBlank(),
-          modifier = Modifier
-            .clip(CircleShape)
-            .background(if (inputQuery.isNotBlank()) VitalTealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-            .testTag("send_ai_query_button")
-        ) {
-          Icon(
-            imageVector = Icons.Default.Send,
-            contentDescription = "Send",
-            tint = Color.White,
-            modifier = Modifier.size(18.dp)
-          )
-        }
-      }
     }
   }
 }

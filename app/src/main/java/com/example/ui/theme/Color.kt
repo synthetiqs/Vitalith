@@ -31,9 +31,28 @@ val VitalWarningOrange = Color(0xFFEA580C)
 val VitalWarningContainer = Color(0xFFFFEDD5)
 
 // Neutral clinical surfaces
-val VitalSlateBg = Color(0xFFF8FAFC)
+val VitalSlateBg = Color(0xFFF1F5F9)
 val VitalSurfaceCard = Color(0xFFFFFFFF)
 val VitalBorder = Color(0xFFE2E8F0)
 val VitalTextPrimary = Color(0xFF0F172A)
 val VitalTextSecondary = Color(0xFF475569)
 val VitalTextMuted = Color(0xFF94A3B8)
+
+// Modern UI Refactor Tokens
+val ObsidianNavyDark = Color(0xFF060E1A)
+val CardSurfaceDark = Color(0xFF0F1E33)
+val CardSurfaceDarkElevated = Color(0xFF162A45)
+val MeshGradientStart = Color(0xFF071426)
+val MeshGradientMid = Color(0xFF0A2B42)
+val MeshGradientEnd = Color(0xFF004D61)
+
+val TealNode = Color(0xFF00BCD4)
+val AmberNode = Color(0xFFF59E0B)
+val CoralNode = Color(0xFFEF4444)
+val IndigoNode = Color(0xFF6366F1)
+val EmeraldNode = Color(0xFF10B981)
+
+val GlowTeal = Color(0x3300BCD4)
+val GlowTealBorder = Color(0x4D00BCD4)
+val GlassWhite = Color(0x14FFFFFF)
+val GlassWhiteBorder = Color(0x26FFFFFF)

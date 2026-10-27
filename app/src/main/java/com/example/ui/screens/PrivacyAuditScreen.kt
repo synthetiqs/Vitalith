@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AuditEntry
-import com.example.data.model.SubscriptionTier
 import com.example.data.repository.VitalithRepository
 import com.example.ui.theme.*
 
@@ -34,7 +34,6 @@ fun PrivacyAuditScreen(
   modifier: Modifier = Modifier
 ) {
   val auditLogs by repository.auditLogs.collectAsState()
-  val subscriptionTier by repository.subscriptionTier.collectAsState()
   val currentUser = authService?.currentUser?.collectAsState()?.value
   val authState = authService?.uiState?.collectAsState()?.value
   val coroutineScope = rememberCoroutineScope()
@@ -137,7 +136,7 @@ fun PrivacyAuditScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            Divider()
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(10.dp))
 
             Row(
@@ -147,13 +146,13 @@ fun PrivacyAuditScreen(
               OutlinedButton(
                 onClick = {
                   coroutineScope.launch {
-                    authService?.signInWithGoogle("vitalith-client-id.apps.googleusercontent.com")
+                    authService?.signInWithGoogle()
                   }
                 },
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.weight(1f)
               ) {
-                Icon(imageVector = Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Google Sign-In", fontSize = 12.sp)
               }
@@ -164,7 +163,7 @@ fun PrivacyAuditScreen(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.weight(1f)
               ) {
-                Icon(imageVector = Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Sign Out", fontSize = 12.sp)
               }
@@ -235,50 +234,6 @@ fun PrivacyAuditScreen(
                 Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = VitalEmeraldSuccess, modifier = Modifier.size(14.dp))
                 Text(text = p, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 15.sp)
               }
-            }
-          }
-        }
-      }
-
-      // Subscription Tier Selector (Entitlements)
-      item {
-        Card(
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          shape = RoundedCornerShape(12.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Text(text = "Subscription Plan & Entitlements", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              PlanOptionTile(
-                name = "Free",
-                price = "$0",
-                features = "1 Profile • Basic Storage",
-                isSelected = subscriptionTier == SubscriptionTier.FREE,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.FREE) },
-                modifier = Modifier.weight(1f)
-              )
-              PlanOptionTile(
-                name = "Premium",
-                price = "$14.99/mo",
-                features = "Unlimited AI • Family Profiles",
-                isSelected = subscriptionTier == SubscriptionTier.PREMIUM,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.PREMIUM) },
-                modifier = Modifier.weight(1f)
-              )
-              PlanOptionTile(
-                name = "Premium+",
-                price = "$49/mo",
-                features = "Navigator • Clinician Review",
-                isSelected = subscriptionTier == SubscriptionTier.PREMIUM_PLUS,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.PREMIUM_PLUS) },
-                modifier = Modifier.weight(1f)
-              )
             }
           }
         }
@@ -368,45 +323,6 @@ fun PrivacyAuditScreen(
         }
       }
     )
-  }
-}
-
-@Composable
-fun PlanOptionTile(
-  name: String,
-  price: String,
-  features: String,
-  isSelected: Boolean,
-  onSelect: () -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Surface(
-    color = if (isSelected) VitalTealContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-    shape = RoundedCornerShape(8.dp),
-    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, VitalTealPrimary) else null,
-    modifier = modifier.clickable(onClick = onSelect)
-  ) {
-    Column(modifier = Modifier.padding(10.dp)) {
-      Text(
-        text = name,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = if (isSelected) VitalOnTealContainer else MaterialTheme.colorScheme.onSurface
-      )
-      Text(
-        text = price,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.ExtraBold,
-        color = if (isSelected) VitalTealPrimary else MaterialTheme.colorScheme.primary
-      )
-      Spacer(modifier = Modifier.height(4.dp))
-      Text(
-        text = features,
-        fontSize = 9.sp,
-        color = if (isSelected) VitalOnTealContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        lineHeight = 12.sp
-      )
-    }
   }
 }
 

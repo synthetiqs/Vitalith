@@ -37,7 +37,7 @@ abstract class VitalithDatabase : RoomDatabase() {
           VitalithDatabase::class.java,
           "vitalith_health_records.db"
         )
-          .fallbackToDestructiveMigration()
+          .fallbackToDestructiveMigration(dropAllTables = true)
           .build()
         INSTANCE = instance
         instance

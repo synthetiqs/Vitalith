@@ -47,14 +47,34 @@ data class HealthTimelineItem(
 data class PatientProfile(
   val id: String,
   val name: String,
-  val relationship: String, // "Primary Patient", "Child", "Elderly Parent"
+  val relationship: String, // "Primary Patient", "Child", "Elderly Parent", "Spouse", "Dependent"
   val dob: String,
   val bloodType: String,
   val mrn: String,
   val isPrimary: Boolean = false,
   val activeConditionsCount: Int = 0,
   val activeMedicationsCount: Int = 0,
-  val pendingTasksCount: Int = 0
+  val pendingTasksCount: Int = 0,
+  val primaryPhysician: String = "Dr. Sarah Jenkins, MD",
+  val allergies: List<String> = emptyList(),
+  val emergencyContact: String = "Elena Adarkwah • +1 (555) 345-6789",
+  val notes: String = "",
+  val gender: String = "Not Specified"
+)
+
+data class UserProfile(
+  val id: String = "user_primary",
+  val fullName: String = "Doug Adarkwah",
+  val email: String = "abydouglas@gmail.com",
+  val phone: String = "+1 (555) 234-8901",
+  val biometricLockEnabled: Boolean = true,
+  val hipaaConsentSigned: Boolean = true,
+  val hipaaConsentDate: String = "May 14, 2026",
+  val emergencyMedicalIdUnlocked: Boolean = true,
+  val hardwareEnclaveEncryption: Boolean = true,
+  val emergencyContactName: String = "Elena Adarkwah (Spouse)",
+  val emergencyContactPhone: String = "+1 (555) 345-6789",
+  val unitPreferences: UnitPreferences = UnitPreferences()
 )
 
 data class MedicationItem(
@@ -71,6 +91,32 @@ data class MedicationItem(
   val isReconciled: Boolean = true,
   val provenance: Provenance
 )
+
+data class MedicationReminder(
+  val id: String,
+  val profileId: String = "profile_doug",
+  val medicationId: String,
+  val medicationName: String,
+  val dosage: String,
+  val hour: Int, // 0..23
+  val minute: Int, // 0..59
+  val daysOfWeek: List<Int> = listOf(1, 2, 3, 4, 5, 6, 7), // 1=Sun .. 7=Sat
+  val isEnabled: Boolean = true,
+  val instructions: String = "Take with food and water",
+  val isTakenToday: Boolean = false,
+  val lastTakenTimestamp: Long? = null
+) {
+  val formattedTime: String
+    get() {
+      val h = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+      val amPm = if (hour < 12) "AM" else "PM"
+      val m = if (minute < 10) "0$minute" else "$minute"
+      return "$h:$m $amPm"
+    }
+
+  val recurrenceLabel: String
+    get() = if (daysOfWeek.size == 7) "Every Day" else "Custom Days (${daysOfWeek.size} days/wk)"
+}
 
 data class CareGrant(
   val id: String,
@@ -126,8 +172,78 @@ data class AppointmentPrep(
   val activeMedsCount: Int
 )
 
-enum class SubscriptionTier {
-  FREE,
-  PREMIUM,
-  PREMIUM_PLUS
+enum class SubscriptionTier(
+  val displayName: String,
+  val monthlyPrice: Double,
+  val annualPricePerMonth: Double,
+  val subtitle: String,
+  val maxProfiles: Int,
+  val aiQueriesPerDay: Int,
+  val ocrScansPerMonth: Int,
+  val fhirAutoSyncEnabled: Boolean,
+  val careTeamLinksAllowed: Int
+) {
+  FREE(
+    displayName = "Vitalith Core",
+    monthlyPrice = 0.0,
+    annualPricePerMonth = 0.0,
+    subtitle = "Essential personal health record vault",
+    maxProfiles = 1,
+    aiQueriesPerDay = 5,
+    ocrScansPerMonth = 2,
+    fhirAutoSyncEnabled = false,
+    careTeamLinksAllowed = 1
+  ),
+  PREMIUM(
+    displayName = "Vitalith Plus",
+    monthlyPrice = 9.99,
+    annualPricePerMonth = 7.49,
+    subtitle = "Unlimited Gemini AI, OCR engine & 5 family profiles",
+    maxProfiles = 5,
+    aiQueriesPerDay = 9999,
+    ocrScansPerMonth = 9999,
+    fhirAutoSyncEnabled = true,
+    careTeamLinksAllowed = 5
+  ),
+  PREMIUM_PLUS(
+    displayName = "Vitalith Concierge",
+    monthlyPrice = 19.99,
+    annualPricePerMonth = 14.99,
+    subtitle = "Unlimited family enclaves, instant OCR & 24/7 care links",
+    maxProfiles = 9999,
+    aiQueriesPerDay = 9999,
+    ocrScansPerMonth = 9999,
+    fhirAutoSyncEnabled = true,
+    careTeamLinksAllowed = 9999
+  )
 }
+
+enum class BillingCycle(val label: String, val discountPercent: Int) {
+  MONTHLY("Monthly", 0),
+  ANNUAL("Annual (Save 25%)", 25)
+}
+
+data class SubscriptionDetails(
+  val tier: SubscriptionTier = SubscriptionTier.PREMIUM,
+  val billingCycle: BillingCycle = BillingCycle.ANNUAL,
+  val status: String = "ACTIVE",
+  val renewalDate: String = "Oct 26, 2027",
+  val lastPaymentMethod: String = "Google Pay (abydouglas@gmail.com)",
+  val lastTransactionId: String = "TXN-VTL-2026-98124",
+  val autoRenew: Boolean = true
+)
+
+data class PaymentTransaction(
+  val id: String,
+  val date: String,
+  val tier: SubscriptionTier,
+  val billingCycle: BillingCycle,
+  val amountPaid: Double,
+  val paymentMethod: String,
+  val status: String = "COMPLETED",
+  val invoiceNumber: String
+) {
+  val transactionId: String get() = id
+  val amount: Double get() = amountPaid
+}
+

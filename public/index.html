@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="original">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vitalith Health Record System</title>
+
+  <!-- Canonical Design Tokens for all 9 Themes -->
+  <link rel="stylesheet" href="../src/styles/themes.css">
+
+  <!-- Step 2: Blocking pre-hydration script to avoid flash of wrong theme -->
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('app-theme');
+        var valid = ['original','plum','forest','mono','indigo','sandstone','arctic','rose','contrast'];
+        var theme = (saved && valid.indexOf(saved) !== -1) ? saved : null;
+        if (!theme) {
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          theme = prefersDark ? 'original' : 'arctic';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'original');
+      }
+    })();
+  </script>
+
+  <!-- No-script fallback ensures dark navy original theme if JS is disabled -->
+  <noscript>
+    <style>
+      :root { color-scheme: dark; }
+    </style>
+  </noscript>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>

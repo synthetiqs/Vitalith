@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-android-vitalith-8d97e254-d4e9-41c9-a2f5-e6530fb47fdd",
+      "rules": "firestore.rules"
+    }
+  ]
+}

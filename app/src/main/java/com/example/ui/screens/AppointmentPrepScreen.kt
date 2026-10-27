@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,8 +18,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.repository.VitalithRepository
 import com.example.ui.theme.*
+import com.example.util.ClinicalPdfGenerator
 
 @Composable
 fun AppointmentPrepScreen(
@@ -27,8 +30,38 @@ fun AppointmentPrepScreen(
   onShareWithDoctor: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  val prep = remember { repository.getAppointmentPrep() }
+  val context = LocalContext.current
+  val userProfile by repository.userProfile.collectAsState()
+  val prep = remember(userProfile.unitPreferences) { repository.getAppointmentPrep(userProfile.unitPreferences) }
+  val profiles by repository.profiles.collectAsState()
+  val currentProfileId by repository.currentProfileId.collectAsState()
+  val currentProfile = remember(profiles, currentProfileId) {
+    profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
+  }
   var showExportSnackbar by remember { mutableStateOf(false) }
+
+  fun exportAndSharePdf() {
+    try {
+      val pdfFile = ClinicalPdfGenerator.generateAppointmentPrepPdf(
+        context = context,
+        prep = prep,
+        profile = currentProfile
+      )
+      repository.recordAudit(
+        action = "PDF_APPOINTMENT_PREP_EXPORT",
+        resource = "Exported 1-page pre-visit clinical briefing for ${prep.doctorName}"
+      )
+      showExportSnackbar = true
+      ClinicalPdfGenerator.shareFile(
+        context = context,
+        file = pdfFile,
+        mimeType = "application/pdf",
+        chooserTitle = "Share Appointment Prep Briefing PDF"
+      )
+    } catch (e: Exception) {
+      android.widget.Toast.makeText(context, "Export error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+    }
+  }
 
   Scaffold(
     snackbarHost = {
@@ -41,7 +74,7 @@ fun AppointmentPrepScreen(
           },
           modifier = Modifier.padding(16.dp)
         ) {
-          Text("1-Page Clinical Briefing exported as PDF & added to Vault.")
+          Text("1-Page Clinical Briefing exported as PDF and opened in Share Sheet.")
         }
       }
     }
@@ -67,7 +100,7 @@ fun AppointmentPrepScreen(
         ) {
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconButton(onClick = onNavigateBack) {
-              Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+              Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Column {
               Text(
@@ -85,7 +118,7 @@ fun AppointmentPrepScreen(
 
           Row {
             IconButton(
-              onClick = { showExportSnackbar = true },
+              onClick = { exportAndSharePdf() },
               modifier = Modifier.testTag("export_prep_pdf_button")
             ) {
               Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = VitalTealPrimary)
@@ -138,7 +171,7 @@ fun AppointmentPrepScreen(
                 }
               }
               Spacer(modifier = Modifier.height(10.dp))
-              Divider(color = Color(0xFF334E68))
+              HorizontalDivider(color = Color(0xFF334E68))
               Spacer(modifier = Modifier.height(10.dp))
               Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -209,7 +242,7 @@ fun AppointmentPrepScreen(
           ) {
             Column(modifier = Modifier.padding(14.dp)) {
               Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(imageVector = Icons.Default.HelpOutline, contentDescription = null, tint = VitalTealPrimary, modifier = Modifier.size(18.dp))
+                Icon(imageVector = Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = VitalTealPrimary, modifier = Modifier.size(18.dp))
                 Text(
                   text = "Recommended Questions for Dr. Chen",
                   fontSize = 13.sp,
@@ -284,7 +317,7 @@ fun AppointmentPrepScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
           ) {
             Button(
-              onClick = { showExportSnackbar = true },
+              onClick = { exportAndSharePdf() },
               colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary),
               shape = RoundedCornerShape(10.dp),
               modifier = Modifier.weight(1f)
