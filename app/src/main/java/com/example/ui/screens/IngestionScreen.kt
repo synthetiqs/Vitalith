@@ -113,8 +113,6 @@ fun IngestionScreen(
     if (bitmap != null) {
       val name = "Camera_Capture_Lab_${System.currentTimeMillis() % 10000}.jpg"
       runLiveClinicalOcr(null, bitmap, name)
-    } else {
-      runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
     }
   }
 
@@ -122,17 +120,7 @@ fun IngestionScreen(
     contract = ActivityResultContracts.RequestPermission()
   ) { isGranted: Boolean ->
     if (isGranted) {
-      try {
-        val intent = android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-        val pm = context.packageManager
-        if (intent.resolveActivity(pm) != null || pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()) {
-          cameraCaptureLauncher.launch(null)
-        } else {
-          runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
-        }
-      } catch (_: Exception) {
-        runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
-      }
+      cameraCaptureLauncher.launch(null)
     } else {
       runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
     }

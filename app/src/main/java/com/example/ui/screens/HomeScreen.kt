@@ -32,7 +32,6 @@ import com.example.ui.components.ClinicalAlertBanner
 import com.example.ui.components.GeminiHealthSummaryCard
 import com.example.ui.components.GlassHeroBanner
 import com.example.ui.components.MonthlyHealthTrendsDashboard
-import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.components.ProvenanceBadge
 import com.example.ui.components.QuickActionDock
 import com.example.ui.components.RangeBar
@@ -120,14 +119,131 @@ fun HomeScreen(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-          PatientProfileDropdownSelector(
-            profiles = profiles,
-            currentProfileId = currentProfileId,
-            onSwitchProfile = { repository.switchProfile(it) },
-            onNavigateToSubscription = onNavigateToSubscription,
-            onNavigateToManageProfiles = onNavigateToProfile,
-            testTagPrefix = "profile_selector"
-          )
+          Box {
+            Surface(
+              color = MaterialTheme.colorScheme.surface,
+              shape = RoundedCornerShape(20.dp),
+              border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+              modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .clickable { showProfileDropdown = true }
+                .testTag("profile_selector_button")
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(VitalTealPrimary),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Text(
+                    text = currentProfile.name.take(1),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                  )
+                }
+                Text(
+                  text = currentProfile.name.split(" ").first(),
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                  imageVector = Icons.Default.ArrowDropDown,
+                  contentDescription = "Switch Profile",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
+            }
+
+            DropdownMenu(
+              expanded = showProfileDropdown,
+              onDismissRequest = { showProfileDropdown = false }
+            ) {
+              Text(
+                text = "Switch Patient Profile",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+              )
+              HorizontalDivider()
+              profiles.forEach { p ->
+                DropdownMenuItem(
+                  text = {
+                    Column {
+                      Text(text = p.name, fontWeight = FontWeight.SemiBold)
+                      Text(
+                        text = "${p.relationship} • DOB: ${p.dob.take(10)}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  },
+                  onClick = {
+                    repository.switchProfile(p.id)
+                    showProfileDropdown = false
+                  },
+                  leadingIcon = {
+                    Icon(
+                      imageVector = if (p.isPrimary) Icons.Default.Person else Icons.Default.FamilyRestroom,
+                      contentDescription = null,
+                      tint = if (p.id == currentProfileId) VitalTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+                )
+              }
+              HorizontalDivider()
+              DropdownMenuItem(
+                text = {
+                  Text(
+                    text = "Membership & Subscription",
+                    fontWeight = FontWeight.Bold,
+                    color = VitalTealPrimary
+                  )
+                },
+                onClick = {
+                  showProfileDropdown = false
+                  onNavigateToSubscription()
+                },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Default.WorkspacePremium,
+                    contentDescription = null,
+                    tint = VitalTealPrimary
+                  )
+                },
+                modifier = Modifier.testTag("menu_subscription_item")
+              )
+              DropdownMenuItem(
+                text = {
+                  Text(
+                    text = "Manage Profiles & Account",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                },
+                onClick = {
+                  showProfileDropdown = false
+                  onNavigateToProfile()
+                },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Default.ManageAccounts,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                },
+                modifier = Modifier.testTag("manage_profiles_menu_item")
+              )
+            }
+          }
 
           IconButton(
             onClick = { showUserDropdown = true },
@@ -711,19 +827,118 @@ fun HomeScreen(
               }
             }
 
-            // Manage Profiles Action
-            Surface(
-              onClick = {
-                showUserDropdown = false
-                onNavigateToProfile()
-              },
-              shape = RoundedCornerShape(10.dp),
-              color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-              border = androidx.compose.foundation.BorderStroke(1.dp, VitalTealPrimary.copy(alpha = 0.3f)),
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("user_menu_profiles_account")
-            ) {
+            // Section 1: Switch Patient Profile
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(
+                  text = "SWITCH PATIENT PROFILE",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  letterSpacing = 1.sp,
+                  color = VitalTealPrimary
+                )
+                Text(
+                  text = "${profiles.size} Available",
+                  fontSize = 11.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+
+              profiles.forEach { p ->
+                val isSelected = p.id == currentProfileId
+                Surface(
+                  onClick = {
+                    repository.switchProfile(p.id)
+                    showUserDropdown = false
+                  },
+                  shape = RoundedCornerShape(12.dp),
+                  color = if (isSelected) VitalTealContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface,
+                  border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isSelected) VitalTealPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                  ),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) VitalTealPrimary else VitalSlateBg),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Icon(
+                        imageVector = if (p.isPrimary) Icons.Default.Person else Icons.Default.FamilyRestroom,
+                        contentDescription = null,
+                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                      )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                      Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                      ) {
+                        Text(
+                          text = p.name,
+                          fontWeight = FontWeight.Bold,
+                          fontSize = 13.sp,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (p.isPrimary) {
+                          Surface(
+                            color = VitalTealContainer,
+                            shape = RoundedCornerShape(4.dp)
+                          ) {
+                            Text(
+                              text = "Primary",
+                              fontSize = 9.sp,
+                              fontWeight = FontWeight.Bold,
+                              color = VitalOnTealContainer,
+                              modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                          }
+                        }
+                      }
+                      Text(
+                        text = "${p.relationship} • DOB: ${p.dob.take(10)}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                    if (isSelected) {
+                      Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Active Profile",
+                        tint = VitalTealPrimary,
+                        modifier = Modifier.size(20.dp)
+                      )
+                    }
+                  }
+                }
+              }
+
+              // Manage Profiles Action
+              Surface(
+                onClick = {
+                  showUserDropdown = false
+                  onNavigateToProfile()
+                },
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, VitalTealPrimary.copy(alpha = 0.3f)),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("user_menu_profiles_account")
+              ) {
                 Row(
                   modifier = Modifier.padding(12.dp),
                   verticalAlignment = Alignment.CenterVertically,
@@ -961,82 +1176,44 @@ fun HomeScreen(
 
             HorizontalDivider()
 
-            // Section 3.5: Appearance & Theme (Collapsible)
-            var isDrawerThemesExpanded by remember { mutableStateOf(false) }
-
+            // Section 3.5: Appearance & Theme
             Column(
-              verticalArrangement = Arrangement.spacedBy(8.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
               modifier = Modifier.testTag("user_menu_appearance_section")
             ) {
-              Surface(
-                onClick = { isDrawerThemesExpanded = !isDrawerThemesExpanded },
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("user_menu_theme_collapse_toggle")
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
               ) {
-                Row(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                  ) {
-                    Icon(
-                      imageVector = Icons.Default.Palette,
-                      contentDescription = null,
-                      tint = VitalTealPrimary,
-                      modifier = Modifier.size(18.dp)
-                    )
-                    Column {
-                      Text(
-                        text = "APPEARANCE & THEMES",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        color = MaterialTheme.colorScheme.primary
-                      )
-                      val currentDesc = ALL_THEMES.firstOrNull { it.key == activeThemeKey } ?: ALL_THEMES.first()
-                      Text(
-                        text = "${currentDesc.label} • ${if (isDrawerThemesExpanded) "Tap to collapse" else "Tap to expand (${ALL_THEMES.size} themes)"}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                      )
-                    }
-                  }
-                  Icon(
-                    imageVector = if (isDrawerThemesExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isDrawerThemesExpanded) "Collapse Theme List" else "Expand Theme List",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                  )
-                }
+                Text(
+                  text = "APPEARANCE & THEME",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  letterSpacing = 1.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                  text = "${ALL_THEMES.size} Themes",
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary
+                )
               }
 
-              AnimatedVisibility(
-                visible = isDrawerThemesExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+              Text(
+                text = "Select from 9 medical palettes. Changes apply instantly across the entire application and persist in local storage.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 15.sp
+              )
+
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .testTag("user_menu_themes_radiogroup"),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
               ) {
-                Column(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("user_menu_themes_radiogroup"),
-                  verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                  Text(
-                    text = "Select from 9 medical palettes. Changes apply instantly across the entire application and persist in local storage.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                  )
                 ALL_THEMES.forEach { themeDesc ->
                   val isThemeSelected = activeThemeKey == themeDesc.key
                   Surface(
@@ -1143,7 +1320,6 @@ fun HomeScreen(
                 }
               }
             }
-            }
 
             HorizontalDivider()
 
@@ -1201,6 +1377,7 @@ fun HomeScreen(
       }
     }
   }
+}
 }
 
 @Composable

@@ -206,78 +206,25 @@ fun AppearanceSettingsScreen(
         }
       }
 
-      var isThemesListExpanded by remember { mutableStateOf(true) }
+      // 2. Curated Clinical Themes (9 Design Systems)
+      AppearanceSectionHeader("CURATED CLINICAL THEMES (9 DESIGN SYSTEMS)")
 
-      // 2. Curated Clinical Themes (9 Design Systems - Collapsible)
       Surface(
-        onClick = { isThemesListExpanded = !isThemesListExpanded },
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("appearance_themes_collapse_toggle")
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth()
       ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            Icon(Icons.Default.Palette, contentDescription = null, tint = VitalTealPrimary, modifier = Modifier.size(18.dp))
-            Column {
-              Text(
-                text = "CURATED CLINICAL THEMES (9 DESIGN SYSTEMS)",
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                color = MaterialTheme.colorScheme.primary
-              )
-              Text(
-                text = "Active: ${activeTokens.label} • ${if (isThemesListExpanded) "Tap to collapse" else "Tap to expand theme list"}",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-          }
-          Icon(
-            imageVector = if (isThemesListExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-            contentDescription = if (isThemesListExpanded) "Collapse Theme List" else "Expand Theme List",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-          )
-        }
-      }
-
-      AnimatedVisibility(
-        visible = isThemesListExpanded,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut()
-      ) {
-        Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = MaterialTheme.colorScheme.surface,
-          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("appearance_themes_list")
-        ) {
-          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeManager.availableThemes.forEach { descriptor ->
-              val isSelected = activeThemeKey == descriptor.key
-              ThemeSelectionCard(
-                descriptor = descriptor,
-                isSelected = isSelected,
-                onClick = {
-                  ThemeManager.setTheme(descriptor.key, persist = true)
-                }
-              )
-            }
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          ThemeManager.availableThemes.forEach { descriptor ->
+            val isSelected = activeThemeKey == descriptor.key
+            ThemeSelectionCard(
+              descriptor = descriptor,
+              isSelected = isSelected,
+              onClick = {
+                ThemeManager.setTheme(descriptor.key, persist = true)
+              }
+            )
           }
         }
       }

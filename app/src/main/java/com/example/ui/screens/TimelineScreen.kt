@@ -30,7 +30,6 @@ import com.example.data.model.TimelineCategory
 import com.example.data.repository.VitalithRepository
 import com.example.ui.components.GeminiHealthSummaryCard
 import com.example.ui.components.MedicalTermExplainerModal
-import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.components.ProvenanceBadge
 import com.example.ui.components.TimelineSpineItem
 import com.example.ui.theme.*
@@ -132,31 +131,9 @@ fun TimelineScreen(
             }
           }
 
-          Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-          // Active Patient Profile Selector Dropdown
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text(
-              text = "Patient Record:",
-              fontSize = 12.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            PatientProfileDropdownSelector(
-              profiles = profiles,
-              currentProfileId = currentProfileId,
-              onSwitchProfile = { repository.switchProfile(it) },
-              modifier = Modifier.testTag("timeline_patient_dropdown")
-            )
-          }
-
-          Spacer(modifier = Modifier.height(10.dp))
-
-          // Search Bar
+        // Search Bar
         OutlinedTextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
