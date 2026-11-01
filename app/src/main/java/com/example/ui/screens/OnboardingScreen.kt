@@ -64,7 +64,7 @@ fun OnboardingScreen(
       OnboardingSlideData(
         title = "Clinical AI Intelligence",
         subtitle = "Grounded Biomarker Radar & Visit Prep",
-        description = "Empowered by Gemini 3.5 Flash medical synthesis. Detect subtle glycemic and lipid trajectory anomalies, and auto-generate 1-page visit briefings for doctor consultations.",
+        description = "Empowered by Vitalith AI medical synthesis. Detect subtle glycemic and lipid trajectory anomalies, and auto-generate 1-page visit briefings for doctor consultations.",
         icon = Icons.Default.Psychology,
         badgeText = "REAL-TIME CLINICAL RADAR",
         featureBadges = listOf(

@@ -106,7 +106,7 @@ fun GeminiHealthSummaryCard(
           Column {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
               Text(
-                text = "Gemini Clinical Synthesis",
+                text = "Vitalith Clinical Synthesis",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -148,7 +148,7 @@ fun GeminiHealthSummaryCard(
             ) {
               Icon(
                 imageVector = Icons.Default.Refresh,
-                contentDescription = "Refresh Gemini Summary",
+                contentDescription = "Refresh Vitalith Summary",
                 tint = VitalTealPrimary,
                 modifier = Modifier.size(18.dp)
               )
@@ -204,24 +204,27 @@ fun GeminiHealthSummaryCard(
             // Flagged Anomalies & Clinical Watchlist
             if (currentSummary.flaggedFindings.isNotEmpty()) {
               Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
+                ResponsiveWrapRow(
                   modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically
-                ) {
-                  Text(
-                    text = "BIOMARKER ANOMALY & SURVEILLANCE RADAR",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 0.5.sp
-                  )
-                  Text(
-                    text = "${currentSummary.flaggedFindings.size} items monitored",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                  )
-                }
+                  leftContent = {
+                    Text(
+                      text = "BIOMARKER ANOMALY & SURVEILLANCE RADAR",
+                      fontSize = 10.5.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      letterSpacing = 0.5.sp
+                    )
+                  },
+                  rightContent = {
+                    Text(
+                      text = "${currentSummary.flaggedFindings.size} items monitored",
+                      fontSize = 10.sp,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  },
+                  horizontalSpacing = 8.dp,
+                  verticalSpacing = 2.dp
+                )
 
                 currentSummary.flaggedFindings.forEach { finding ->
                   val (badgeColor, textColor) = when (finding.severity) {
@@ -340,22 +343,24 @@ fun GeminiHealthSummaryCard(
             }
 
             // Provenance footer
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Text(
-                text = "Model: ${currentSummary.modelUsed}",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-              Text(
-                text = currentSummary.generatedAt,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
+            ResponsiveWrapRow(
+              leftContent = {
+                Text(
+                  text = "Model: ${currentSummary.modelUsed}",
+                  fontSize = 10.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              },
+              rightContent = {
+                Text(
+                  text = currentSummary.generatedAt,
+                  fontSize = 10.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              },
+              horizontalSpacing = 8.dp,
+              verticalSpacing = 4.dp
+            )
           }
         }
       } else {
@@ -368,7 +373,7 @@ fun GeminiHealthSummaryCard(
         ) {
           CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = VitalTealPrimary)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Synthesizing patient records with Gemini AI...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Synthesizing patient records with Vitalith AI...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }

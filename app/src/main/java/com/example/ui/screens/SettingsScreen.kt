@@ -46,6 +46,7 @@ fun SettingsScreen(
   onNavigateToExportImport: () -> Unit = {},
   onNavigateToAppearance: () -> Unit = {},
   onNavigateToSubscription: () -> Unit = {},
+  onNavigateToWearables: () -> Unit = {},
   onLogOut: () -> Unit = {},
   onRevisitTour: () -> Unit = {},
   modifier: Modifier = Modifier
@@ -56,14 +57,7 @@ fun SettingsScreen(
   val userProfile by repository.userProfile.collectAsState()
 
   // App-level preferences state
-  var autoLockTimeout by remember { mutableStateOf("5 minutes") }
-  var autoOcrProcessing by remember { mutableStateOf(true) }
-  var drugConflictAlerts by remember { mutableStateOf(true) }
-  var fhirSyncFrequency by remember { mutableStateOf("Real-Time") }
-  var refillReminders by remember { mutableStateOf(true) }
-  var labResultAlerts by remember { mutableStateOf(true) }
-  var careGrantAlerts by remember { mutableStateOf(true) }
-  var highContrastTheme by remember { mutableStateOf(false) }
+  val appSettings by repository.appSettings.collectAsState()
 
   var showLogOutConfirm by remember { mutableStateOf(false) }
   var showPurgeCacheConfirm by remember { mutableStateOf(false) }
@@ -303,6 +297,19 @@ fun SettingsScreen(
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
+          // High Contrast Mode (WCAG AAA) Toggle
+          SettingsToggleItem(
+            title = "High Contrast Mode (WCAG AAA)",
+            description = "Boost contrast borders and luminance for high-readability in clinical environments.",
+            checked = appSettings.highContrastTheme,
+            onCheckedChange = { isHighContrast ->
+              repository.updateAppSettings { it.copy(highContrastTheme = isHighContrast) }
+            },
+            testTag = "settings_high_contrast_toggle"
+          )
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
           Surface(
             onClick = onNavigateToAppearance,
             shape = RoundedCornerShape(12.dp),
@@ -371,6 +378,81 @@ fun SettingsScreen(
         }
       }
 
+      // Connected Health Wearables (Google Fit)
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable { onNavigateToWearables() }
+          .testTag("settings_wearables_button")
+      ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(14.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(42.dp)
+                  .clip(CircleShape)
+                  .background(Color(0xFF4285F4).copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.WatchLater,
+                  contentDescription = null,
+                  tint = Color(0xFF1A73E8),
+                  modifier = Modifier.size(22.dp)
+                )
+              }
+              Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  Text(
+                    text = "Connected Wearables",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                  )
+                  Surface(
+                    color = VitalTealContainer,
+                    shape = RoundedCornerShape(4.dp)
+                  ) {
+                    Text(
+                      text = "Google Fit",
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = VitalTealPrimary,
+                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                  }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                  text = "Sync Pixel Watch, Fitbit, Galaxy Watch & Garmin daily activity and continuous heart rate.",
+                  fontSize = 11.5.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  lineHeight = 15.sp
+                )
+              }
+
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+              )
+            }
+          }
+        }
+      }
+
       // 3. Cryptographic Security & Biometric Enclave
       SettingsSectionHeader(title = "SECURITY & CRYPTOGRAPHIC ENCLAVE")
 
@@ -406,11 +488,11 @@ fun SettingsScreen(
               modifier = Modifier.fillMaxWidth()
             ) {
               listOf("Immediately", "1 minute", "5 minutes", "15 minutes").forEach { option ->
-                val isSelected = autoLockTimeout == option
+                val isSelected = appSettings.autoLockTimeout == option
                 FilterChip(
                   selected = isSelected,
                   onClick = {
-                    autoLockTimeout = option
+                    repository.updateAppSettings { it.copy(autoLockTimeout = option) }
                     repository.recordAudit("AUTO_LOCK_UPDATED", "Auto-lock timeout set to $option")
                   },
                   label = { Text(option, fontSize = 11.sp) },
@@ -956,8 +1038,10 @@ fun SettingsScreen(
           SettingsToggleItem(
             title = "Automatic Document OCR Extraction",
             description = "Immediately parse biomarker tables and clinical values when laboratory PDFs or photos are attached.",
-            checked = autoOcrProcessing,
-            onCheckedChange = { autoOcrProcessing = it }
+            checked = appSettings.autoOcrProcessing,
+            onCheckedChange = { isEnabled ->
+              repository.updateAppSettings { it.copy(autoOcrProcessing = isEnabled) }
+            }
           )
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
@@ -965,8 +1049,10 @@ fun SettingsScreen(
           SettingsToggleItem(
             title = "Live Drug Conflict & Interaction Checking",
             description = "Cross-reference newly reconciled medications against active regimens for contraindications.",
-            checked = drugConflictAlerts,
-            onCheckedChange = { drugConflictAlerts = it }
+            checked = appSettings.drugConflictAlerts,
+            onCheckedChange = { isEnabled ->
+              repository.updateAppSettings { it.copy(drugConflictAlerts = isEnabled) }
+            }
           )
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
@@ -987,8 +1073,10 @@ fun SettingsScreen(
             ) {
               listOf("Real-Time", "Daily", "Manual Only").forEach { freq ->
                 FilterChip(
-                  selected = fhirSyncFrequency == freq,
-                  onClick = { fhirSyncFrequency = freq },
+                  selected = appSettings.fhirSyncFrequency == freq,
+                  onClick = {
+                    repository.updateAppSettings { it.copy(fhirSyncFrequency = freq) }
+                  },
                   label = { Text(freq, fontSize = 11.sp) },
                   colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = VitalTealPrimary,
@@ -1014,8 +1102,10 @@ fun SettingsScreen(
           SettingsToggleItem(
             title = "Medication Refill Warnings",
             description = "Notify when prescriptions have less than 7 days remaining supply.",
-            checked = refillReminders,
-            onCheckedChange = { refillReminders = it }
+            checked = appSettings.refillReminders,
+            onCheckedChange = { isEnabled ->
+              repository.updateAppSettings { it.copy(refillReminders = isEnabled) }
+            }
           )
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
@@ -1023,8 +1113,10 @@ fun SettingsScreen(
           SettingsToggleItem(
             title = "Lab Result Ingestion Alerts",
             description = "Notify when external EHR sync or OCR extraction finishes processing.",
-            checked = labResultAlerts,
-            onCheckedChange = { labResultAlerts = it }
+            checked = appSettings.labResultAlerts,
+            onCheckedChange = { isEnabled ->
+              repository.updateAppSettings { it.copy(labResultAlerts = isEnabled) }
+            }
           )
 
           HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
@@ -1032,8 +1124,10 @@ fun SettingsScreen(
           SettingsToggleItem(
             title = "Care-Team Grant Expiration Reminders",
             description = "Alert 24 hours before a time-limited provider access link expires.",
-            checked = careGrantAlerts,
-            onCheckedChange = { careGrantAlerts = it }
+            checked = appSettings.careGrantAlerts,
+            onCheckedChange = { isEnabled ->
+              repository.updateAppSettings { it.copy(careGrantAlerts = isEnabled) }
+            }
           )
         }
       }
@@ -1297,6 +1391,10 @@ private fun SettingsToggleItem(
     Switch(
       checked = checked,
       onCheckedChange = onCheckedChange,
+      colors = SwitchDefaults.colors(
+        checkedThumbColor = Color.White,
+        checkedTrackColor = MaterialTheme.colorScheme.primary
+      ),
       modifier = if (testTag != null) Modifier.testTag(testTag) else Modifier
     )
   }

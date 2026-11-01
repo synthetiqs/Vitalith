@@ -35,26 +35,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CareGrant
 import com.example.data.model.ItemStatus
+import com.example.data.model.SubscriptionTier
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SharingScreen(
   repository: VitalithRepository,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onNavigateToSubscription: () -> Unit = {}
 ) {
   val context = LocalContext.current
   val careGrants by repository.careGrants.collectAsState()
   val timelineItems by repository.timelineItems.collectAsState()
   val medications by repository.medications.collectAsState()
   val profiles by repository.profiles.collectAsState()
+  val subscriptionTier by repository.subscriptionTier.collectAsState()
   val currentProfileId by repository.currentProfileId.collectAsState()
   val currentProfile = remember(profiles, currentProfileId) {
     profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
   }
 
+  val profileCareGrants = remember(careGrants, currentProfileId) {
+    careGrants.filter { it.profileId == currentProfileId }
+  }
+  val activeGrants = remember(profileCareGrants) {
+    profileCareGrants.filter { it.isActive }
+  }
+  val profileTimelineItems = remember(timelineItems, currentProfileId) {
+    timelineItems.filter { it.profileId == currentProfileId }
+  }
+  val profileMedications = remember(medications, currentProfileId) {
+    medications.filter { it.profileId == currentProfileId }
+  }
+
   var showCreateGrantDialog by remember { mutableStateOf(false) }
+  var showUpgradeModal by remember { mutableStateOf(false) }
   var newlyCreatedGrant by remember { mutableStateOf<CareGrant?>(null) }
   var previewGrantForDoctorView by remember { mutableStateOf<CareGrant?>(null) }
   var showQrCodeGrant by remember { mutableStateOf<CareGrant?>(null) }
@@ -104,7 +122,7 @@ fun SharingScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
           Text(
             text = "Care-Team Sharing",
             fontSize = 20.sp,
@@ -116,22 +134,40 @@ fun SharingScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
-        FilledTonalIconButton(
-          onClick = { showCreateGrantDialog = true },
-          colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = VitalTealContainer,
-            contentColor = VitalTealPrimary
-          ),
-          shape = RoundedCornerShape(10.dp),
-          modifier = Modifier
-            .size(44.dp)
-            .testTag("create_share_link_button")
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-          Icon(
-            imageVector = Icons.Default.AddLink,
-            contentDescription = "Create Share Link",
-            modifier = Modifier.size(22.dp)
+          PatientProfileDropdownSelector(
+            profiles = profiles,
+            currentProfileId = currentProfileId,
+            onSwitchProfile = { repository.switchProfile(it) },
+            onNavigateToSubscription = onNavigateToSubscription,
+            testTagPrefix = "sharing_profile_selector"
           )
+          FilledTonalIconButton(
+            onClick = {
+              if (subscriptionTier == SubscriptionTier.FREE && activeGrants.isNotEmpty()) {
+                showUpgradeModal = true
+              } else {
+                showCreateGrantDialog = true
+              }
+            },
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+              containerColor = VitalTealContainer,
+              contentColor = VitalTealPrimary
+            ),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .size(44.dp)
+              .testTag("create_share_link_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.AddLink,
+              contentDescription = "Create Share Link",
+              modifier = Modifier.size(22.dp)
+            )
+          }
         }
       }
     }
@@ -174,6 +210,45 @@ fun SharingScreen(
         }
       }
 
+      if (subscriptionTier == SubscriptionTier.FREE && activeGrants.isNotEmpty()) {
+        item {
+          Card(
+            colors = CardDefaults.cardColors(containerColor = VitalWarningContainer.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Row(
+              modifier = Modifier.padding(14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = VitalWarningOrange)
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = "Basic Tier: 1 Active Care Grant Limit",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp,
+                  color = Color(0xFF7C2D12)
+                )
+                Text(
+                  text = "You have reached the maximum active share grant for the Free tier. Upgrade to Premium for unlimited links.",
+                  fontSize = 11.5.sp,
+                  color = Color(0xFF7C2D12)
+                )
+              }
+              Button(
+                onClick = onNavigateToSubscription,
+                colors = ButtonDefaults.buttonColors(containerColor = VitalWarningOrange),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+              ) {
+                Text("Upgrade", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+              }
+            }
+          }
+        }
+      }
+
       item {
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -181,19 +256,19 @@ fun SharingScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           Text(
-            text = "Active Access Grants (${careGrants.count { it.isActive }})",
+            text = "Active Access Grants (${profileCareGrants.count { it.isActive }})",
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
           )
           Text(
-            text = "Total Grants: ${careGrants.size}",
+            text = "Total Grants: ${profileCareGrants.size}",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
       }
 
-      items(careGrants, key = { it.id }) { grant ->
+      items(profileCareGrants, key = { it.id }) { grant ->
         CareGrantCard(
           grant = grant,
           onCopyLink = { copyToClipboard("https://vitalith.health/vault/grant/${grant.tokenKey}") },
@@ -204,6 +279,34 @@ fun SharingScreen(
         )
       }
     }
+  }
+
+  // Upgrade Modal for Tier Gating
+  if (showUpgradeModal) {
+    AlertDialog(
+      onDismissRequest = { showUpgradeModal = false },
+      icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = VitalWarningOrange) },
+      title = { Text("Care-Team Sharing Limit") },
+      text = {
+        Text("The Basic (Free) tier includes 1 active care-team share grant at a time. Upgrade to Premium or Concierge for unlimited links, granular timeframes, and instant revocations.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showUpgradeModal = false
+            onNavigateToSubscription()
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary)
+        ) {
+          Text("Upgrade Plan")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showUpgradeModal = false }) {
+          Text("Cancel")
+        }
+      }
+    )
   }
 
   // 1. Create Grant Dialog
@@ -500,8 +603,8 @@ fun SharingScreen(
         }
 
         if (grant.scope.contains("Medications") || grant.scope.contains("Full")) {
-          Text(text = "Active Medications (${medications.size})", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VitalTealPrimary)
-          medications.forEach { med ->
+          Text(text = "Active Medications (${profileMedications.size})", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VitalTealPrimary)
+          profileMedications.forEach { med ->
             Card(
               colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
               border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
@@ -518,9 +621,9 @@ fun SharingScreen(
         if (grant.scope.contains("Full") || grant.scope.contains("Labs")) {
           Text(text = "Clinical Timeline Records", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VitalTealPrimary)
           val filteredTimeline = if (grant.scope.contains("Labs Only")) {
-            timelineItems.filter { it.category == com.example.data.model.TimelineCategory.LAB }
+            profileTimelineItems.filter { it.category == com.example.data.model.TimelineCategory.LAB }
           } else {
-            timelineItems.take(4)
+            profileTimelineItems.take(4)
           }
 
           filteredTimeline.forEach { item ->

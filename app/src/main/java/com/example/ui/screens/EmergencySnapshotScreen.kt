@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -15,22 +18,47 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.ItemStatus
+import com.example.data.model.TimelineCategory
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EmergencySnapshotScreen(
   repository: VitalithRepository,
   onNavigateBack: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
   val profiles by repository.profiles.collectAsState()
   val currentProfileId by repository.currentProfileId.collectAsState()
   val currentProfile = profiles.firstOrNull { it.id == currentProfileId } ?: profiles.first()
+  val medications by repository.medications.collectAsState()
+  val timelineItems by repository.timelineItems.collectAsState()
+  val userProfile by repository.userProfile.collectAsState()
+
+  val activeMedications = remember(medications, currentProfileId) {
+    medications.filter { it.profileId == currentProfile.id && it.status == ItemStatus.ACTIVE }
+  }
+
+  val profileConditions = remember(timelineItems, currentProfileId) {
+    timelineItems.filter { it.profileId == currentProfile.id && it.category == TimelineCategory.CONDITION }
+  }
+
+  val contactRaw = if (currentProfile.emergencyContact.isNotBlank()) {
+    currentProfile.emergencyContact
+  } else {
+    "${userProfile.emergencyContactName} • ${userProfile.emergencyContactPhone}"
+  }
+  val phoneRegex = Regex("""\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}""")
+  val parsedPhone = phoneRegex.find(contactRaw)?.value ?: userProfile.emergencyContactPhone
 
   Column(
     modifier = modifier
@@ -49,16 +77,23 @@ fun EmergencySnapshotScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+          modifier = Modifier.weight(1f),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
           IconButton(onClick = onNavigateBack) {
             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
           }
-          Column {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          Column(modifier = Modifier.weight(1f)) {
+            FlowRow(
+              verticalArrangement = Arrangement.spacedBy(2.dp),
+              horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
               Text(
                 text = "EMERGENCY MEDICAL ID",
                 color = VitalAlertRed,
-                fontSize = 14.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.ExtraBold
               )
               Surface(
@@ -77,10 +112,20 @@ fun EmergencySnapshotScreen(
             Text(
               text = "Lock-screen accessible patient snapshot",
               color = Color(0xFF94A3B8),
-              fontSize = 11.sp
+              fontSize = 10.5.sp
             )
           }
         }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Patient Profile Switcher for Emergency Responders
+        PatientProfileDropdownSelector(
+          profiles = profiles,
+          currentProfileId = currentProfileId,
+          onSwitchProfile = { repository.switchProfile(it) },
+          testTagPrefix = "emergency_profile_selector"
+        )
       }
     }
 
@@ -128,37 +173,57 @@ fun EmergencySnapshotScreen(
 
       // Critical Allergies (Highest Priority for ER)
       item {
+        val allergies = currentProfile.allergies
         Card(
-          colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
+          colors = CardDefaults.cardColors(containerColor = if (allergies.isNotEmpty()) Color(0xFF450A0A) else Color(0xFF1E293B)),
           shape = RoundedCornerShape(12.dp),
-          border = androidx.compose.foundation.BorderStroke(1.5.dp, VitalAlertRed),
-          modifier = Modifier.fillMaxWidth()
+          border = androidx.compose.foundation.BorderStroke(1.5.dp, if (allergies.isNotEmpty()) VitalAlertRed else Color(0xFF334155)),
+          modifier = Modifier.fillMaxWidth().testTag("emergency_allergies_card")
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = VitalAlertRed)
-              Text(text = "SEVERE ALLERGIES (CONTRAINDICATION)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+              Icon(
+                imageVector = if (allergies.isNotEmpty()) Icons.Default.Warning else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = if (allergies.isNotEmpty()) VitalAlertRed else VitalEmeraldSuccess
+              )
+              Text(
+                text = if (allergies.isNotEmpty()) "ALLERGIES & CONTRAINDICATIONS" else "DOCUMENTED ALLERGIES",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+              )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-              color = Color(0xFF7F1D1D),
-              shape = RoundedCornerShape(8.dp),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Column(modifier = Modifier.padding(10.dp)) {
-                Text(text = "• PENICILLIN / AMOXICILLIN", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(text = "Reaction: Anaphylactoid, severe hives, airway compromise. Do not administer beta-lactam class.", color = Color(0xFFFECACA), fontSize = 11.sp)
-              }
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Surface(
-              color = Color(0xFF7F1D1D),
-              shape = RoundedCornerShape(8.dp),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Column(modifier = Modifier.padding(10.dp)) {
-                Text(text = "• SHELLFISH (MILD)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = "Reaction: Oral pruritus / localized rash.", color = Color(0xFFFECACA), fontSize = 11.sp)
+            if (allergies.isEmpty()) {
+              Text(
+                text = "No Known Drug or Food Allergies Documented",
+                color = Color(0xFF94A3B8),
+                fontSize = 13.sp,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+              )
+            } else {
+              allergies.forEach { allergy ->
+                val isSevere = allergy.contains("Severe", ignoreCase = true) || allergy.contains("Anaphylaxis", ignoreCase = true) || allergy.contains("Penicillin", ignoreCase = true)
+                Surface(
+                  color = if (isSevere) Color(0xFF7F1D1D) else Color(0xFF334155),
+                  shape = RoundedCornerShape(8.dp),
+                  modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                ) {
+                  Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                      text = "• ${allergy.uppercase()}",
+                      color = Color.White,
+                      fontSize = 13.sp,
+                      fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                      text = if (isSevere) "Contraindication: Clinical hypersensitivity. Review before administering." else "Documented patient allergy.",
+                      color = if (isSevere) Color(0xFFFECACA) else Color(0xFF94A3B8),
+                      fontSize = 11.sp
+                    )
+                  }
+                }
               }
             }
           }
@@ -171,17 +236,27 @@ fun EmergencySnapshotScreen(
           colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
           shape = RoundedCornerShape(12.dp),
           border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("emergency_medications_card")
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               Icon(imageVector = Icons.Default.Medication, contentDescription = null, tint = Color(0xFF38BDF8))
-              Text(text = "ACTIVE MEDICATIONS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+              Text(text = "ACTIVE MEDICATIONS (${activeMedications.size})", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "1. Metformin HCl 500mg — Oral BID with meals", color = Color(0xFFE2E8F0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text(text = "2. Atorvastatin 10mg — Oral Daily at bedtime", color = Color(0xFFE2E8F0), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text(text = "3. Vitamin D3 2000 IU — Oral Daily", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            if (activeMedications.isEmpty()) {
+              Text(text = "No active prescription regimens on file", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            } else {
+              activeMedications.forEachIndexed { idx, med ->
+                Text(
+                  text = "${idx + 1}. ${med.name} ${med.dosage} — ${med.frequency} (Indication: ${med.indication})",
+                  color = Color(0xFFE2E8F0),
+                  fontSize = 12.5.sp,
+                  fontWeight = FontWeight.Medium,
+                  modifier = Modifier.padding(vertical = 2.dp)
+                )
+              }
+            }
           }
         }
       }
@@ -192,13 +267,23 @@ fun EmergencySnapshotScreen(
           colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
           shape = RoundedCornerShape(12.dp),
           border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("emergency_conditions_card")
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
-            Text(text = "KNOWN MEDICAL CONDITIONS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(text = "KNOWN MEDICAL CONDITIONS (${profileConditions.size})", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(6.dp))
-            Text(text = "• Pre-Diabetes (ICD-10 R73.09) — Diet & Metformin", color = Color(0xFFE2E8F0), fontSize = 12.sp)
-            Text(text = "• Mild Hyperlipidemia (ICD-10 E78.5) — Statin controlled", color = Color(0xFFE2E8F0), fontSize = 12.sp)
+            if (profileConditions.isEmpty()) {
+              Text(text = "No chronic conditions documented", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            } else {
+              profileConditions.forEach { cond ->
+                Text(
+                  text = "• ${cond.title}: ${cond.subtitle}",
+                  color = Color(0xFFE2E8F0),
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(vertical = 2.dp)
+                )
+              }
+            }
           }
         }
       }
@@ -209,7 +294,7 @@ fun EmergencySnapshotScreen(
           colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
           shape = RoundedCornerShape(12.dp),
           border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier.fillMaxWidth().testTag("emergency_contacts_card")
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Text(text = "EMERGENCY CONTACTS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -219,13 +304,23 @@ fun EmergencySnapshotScreen(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
-              Column {
-                Text(text = "Primary Contact: Grace Adarkwah (Spouse)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text(text = "+1 (555) 392-1084 • Mobile", color = Color(0xFF38BDF8), fontSize = 12.sp)
+              Column(modifier = Modifier.weight(1f)) {
+                Text(text = "Contact: $contactRaw", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(text = "$parsedPhone • Emergency Notification", color = Color(0xFF38BDF8), fontSize = 12.sp)
               }
+              Spacer(modifier = Modifier.width(8.dp))
               FilledTonalButton(
-                onClick = {},
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF0369A1))
+                onClick = {
+                  try {
+                    val cleanPhone = parsedPhone.filter { it.isDigit() || it == '+' }
+                    val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$cleanPhone"))
+                    context.startActivity(dialIntent)
+                  } catch (e: Exception) {
+                    Log.e("EmergencySnapshot", "Unable to launch dialer: ${e.message}")
+                  }
+                },
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF0369A1)),
+                modifier = Modifier.testTag("emergency_call_button")
               ) {
                 Icon(imageVector = Icons.Default.Phone, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -270,7 +365,7 @@ fun EmergencySnapshotScreen(
               fontWeight = FontWeight.Bold
             )
             Text(
-              text = "Token: vtl_emg_qr_7718de55 • Read-Only No Login Required",
+              text = "Token: vtl_emg_qr_${currentProfile.id.takeLast(6)} • Read-Only No Login Required",
               color = Color(0xFF94A3B8),
               fontSize = 10.sp,
               fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
@@ -278,6 +373,55 @@ fun EmergencySnapshotScreen(
           }
         }
       }
+
+      // Emergency Medical ID Lock Screen Visibility Toggle
+      item {
+        Card(
+          colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+          shape = RoundedCornerShape(12.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Lock Screen Visibility",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Text(
+                text = if (userProfile.emergencyMedicalIdUnlocked) {
+                  "Active • Visible to first responders from lockscreen without unlocking device"
+                } else {
+                  "Disabled • Emergency Medical ID hidden until device is unlocked"
+                },
+                color = if (userProfile.emergencyMedicalIdUnlocked) VitalEmeraldSuccess else Color(0xFF94A3B8),
+                fontSize = 11.sp
+              )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+              checked = userProfile.emergencyMedicalIdUnlocked,
+              onCheckedChange = { repository.setEmergencyMedicalIdUnlocked(it) },
+              modifier = Modifier.testTag("emergency_screen_lockscreen_toggle"),
+              colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = VitalAlertRed,
+                uncheckedThumbColor = Color(0xFF94A3B8),
+                uncheckedTrackColor = Color(0xFF334155)
+              )
+            )
+          }
+        }
+      }
     }
   }
 }
+

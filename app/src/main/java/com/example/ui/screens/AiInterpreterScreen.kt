@@ -28,6 +28,7 @@ import com.example.ui.components.CitationPill
 import com.example.ui.components.ClinicalAlertBanner
 import com.example.ui.components.EditorialAiCard
 import com.example.ui.components.FloatingComposer
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -35,16 +36,34 @@ import kotlinx.coroutines.launch
 fun AiInterpreterScreen(
   repository: VitalithRepository,
   onNavigateToPrep: () -> Unit,
+  onNavigateToSubscription: () -> Unit = {},
+  onNavigateToProviderSearch: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
+  val currentProfileId by repository.currentProfileId.collectAsState()
+  val profiles by repository.profiles.collectAsState()
+  val timelineItems by repository.timelineItems.collectAsState()
+  val currentProfile = remember(profiles, currentProfileId) {
+    profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
+  }
+  val profileTimeline = remember(timelineItems, currentProfileId) {
+    timelineItems.filter { it.profileId == currentProfileId }
+  }
   val chatMessages by repository.chatMessages.collectAsState()
+  val profileChatMessages = remember(chatMessages, currentProfileId) {
+    chatMessages.filter { it.profileId == currentProfileId }
+  }
+  val subscriptionTier by repository.subscriptionTier.collectAsState()
+  val dailyAiQueriesCount by repository.dailyAiQueriesCount.collectAsState()
+  var showUpgradeQuotaDialog by remember { mutableStateOf(false) }
+
   var inputQuery by remember { mutableStateOf("") }
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
 
-  LaunchedEffect(chatMessages.size) {
-    if (chatMessages.isNotEmpty()) {
-      listState.animateScrollToItem(chatMessages.size - 1)
+  LaunchedEffect(profileChatMessages.size) {
+    if (profileChatMessages.isNotEmpty()) {
+      listState.animateScrollToItem(profileChatMessages.size - 1)
     }
   }
 
@@ -94,7 +113,7 @@ fun AiInterpreterScreen(
                     .background(VitalEmeraldSuccess)
                 )
                 Text(
-                  text = "Grounded in Doug's Records (6 docs loaded)",
+                  text = "Grounded in ${currentProfile?.name ?: "Patient"}'s Records (${profileTimeline.size} docs loaded)",
                   fontSize = 11.sp,
                   color = VitalEmeraldSuccess,
                   fontWeight = FontWeight.Medium
@@ -103,12 +122,33 @@ fun AiInterpreterScreen(
             }
           }
 
-          IconButton(onClick = onNavigateToPrep) {
-            Icon(
-              imageVector = Icons.Default.AssignmentTurnedIn,
-              contentDescription = "Appointment Prep",
-              tint = VitalTealPrimary
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            PatientProfileDropdownSelector(
+              profiles = profiles,
+              currentProfileId = currentProfileId,
+              onSwitchProfile = { repository.switchProfile(it) },
+              testTagPrefix = "ai_profile_selector"
             )
+            IconButton(onClick = onNavigateToPrep) {
+              Icon(
+                imageVector = Icons.Default.AssignmentTurnedIn,
+                contentDescription = "Appointment Prep",
+                tint = VitalTealPrimary
+              )
+            }
+            IconButton(
+              onClick = onNavigateToProviderSearch,
+              modifier = Modifier.testTag("ai_find_specialist_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.LocalHospital,
+                contentDescription = "Find Nearby Specialists",
+                tint = VitalTealPrimary
+              )
+            }
           }
         }
 
@@ -126,18 +166,36 @@ fun AiInterpreterScreen(
       contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-      items(chatMessages, key = { it.id }) { msg ->
+      items(profileChatMessages, key = { it.id }) { msg ->
         EditorialAiCard(message = msg)
       }
     }
 
-    val suggestions = listOf(
-      "Summarize my records & flag anomalies",
-      "How is my A1c trending?",
-      "Review my active medications & interactions",
-      "Prepare summary for my next appointment",
-      "Test emergency symptom triage (chest pain)"
-    )
+    val suggestions = remember(currentProfileId, currentProfile?.name) {
+      when (currentProfileId) {
+        "profile_maya" -> listOf(
+          "Are Maya's immunizations up to date?",
+          "Review Maya's peanut allergy action plan",
+          "Summarize Maya's pediatric growth and wellness records",
+          "Prepare summary for Maya's upcoming pediatric checkup",
+          "Test emergency symptom triage (anaphylaxis)"
+        )
+        "profile_kwame" -> listOf(
+          "What is Kwame's latest eGFR and kidney function?",
+          "Review Kwame's 4 active medications & cardiology plan",
+          "Check LAD stent follow-up status and vitals",
+          "Prepare briefing for cardiology visit with Dr. Rossi",
+          "Test emergency cardiac triage (chest pain)"
+        )
+        else -> listOf(
+          "Summarize my records & flag anomalies",
+          "How is my A1c trending?",
+          "Review my active medications & interactions",
+          "Prepare summary for my next appointment",
+          "Test emergency symptom triage (chest pain)"
+        )
+      }
+    }
 
     // Floating Composer Bar with animated suggestion chips
     Box(
@@ -150,14 +208,53 @@ fun AiInterpreterScreen(
         onQueryChange = { inputQuery = it },
         onSend = {
           if (inputQuery.isNotBlank()) {
-            val q = inputQuery
-            inputQuery = ""
-            repository.sendUserMessage(q)
+            if (!repository.canExecuteAiQuery()) {
+              showUpgradeQuotaDialog = true
+            } else {
+              val q = inputQuery
+              inputQuery = ""
+              repository.recordAiQueryUsage()
+              repository.sendUserMessage(q)
+            }
           }
         },
         suggestions = suggestions,
         onSelectSuggestion = { suggestion ->
-          repository.sendUserMessage(suggestion)
+          if (!repository.canExecuteAiQuery()) {
+            showUpgradeQuotaDialog = true
+          } else {
+            repository.recordAiQueryUsage()
+            repository.sendUserMessage(suggestion)
+          }
+        }
+      )
+    }
+
+    if (showUpgradeQuotaDialog) {
+      AlertDialog(
+        onDismissRequest = { showUpgradeQuotaDialog = false },
+        title = { Text("Daily AI Query Limit Reached", fontWeight = FontWeight.Bold) },
+        text = {
+          Text(
+            "Free tier accounts include 5 grounded AI queries per day. Upgrade to Vitalith Plus or Concierge for unlimited real-time clinical synthesis and priority processing.",
+            fontSize = 13.sp
+          )
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showUpgradeQuotaDialog = false
+              onNavigateToSubscription()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary)
+          ) {
+            Text("Upgrade Plan", color = Color.White, fontWeight = FontWeight.Bold)
+          }
+        },
+        dismissButton = {
+          TextButton(onClick = { showUpgradeQuotaDialog = false }) {
+            Text("Later")
+          }
         }
       )
     }

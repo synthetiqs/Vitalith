@@ -1,13 +1,20 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.ResponsiveWrapRow
 import com.example.ui.theme.*
 import com.example.util.ExtractedFormBiomarker
 import com.example.util.FormAutoFillData
@@ -49,6 +57,7 @@ import java.util.*
 fun AddHealthRecordScreen(
   repository: VitalithRepository,
   onNavigateBack: () -> Unit,
+  onNavigateToSubscription: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -93,6 +102,8 @@ fun AddHealthRecordScreen(
 
   // OCR & Gemini Auto-Fill State
   var showOcrOptionsModal by remember { mutableStateOf(false) }
+  var showDocumentScannerModal by remember { mutableStateOf(false) }
+  var selectedScannerPresetIndex by remember { mutableIntStateOf(0) }
   var isAnalyzingOcr by remember { mutableStateOf(false) }
   var ocrStepMessage by remember { mutableStateOf("") }
   var ocrStepNumber by remember { mutableIntStateOf(1) }
@@ -117,10 +128,16 @@ fun AddHealthRecordScreen(
     titleError = false
     providerError = false
     autoFillNotice = "Auto-filled via ${result.aiModelUsed} (${(result.confidenceScore * 100).toInt()}% confidence) • ${result.sourceDocumentName}"
-    Toast.makeText(context, "Form auto-filled by Gemini AI!", Toast.LENGTH_SHORT).show()
+    Toast.makeText(context, "Form auto-filled by Vitalith AI!", Toast.LENGTH_SHORT).show()
   }
 
+  var showOcrQuotaDialog by remember { mutableStateOf(false) }
+
   fun runOcrPipeline(uri: Uri?, bitmap: Bitmap?, preset: GeminiFormOcrAnalyzer.ClinicalPreset?, sourceName: String) {
+    if (!repository.canExecuteOcrScan()) {
+      showOcrQuotaDialog = true
+      return
+    }
     coroutineScope.launch {
       isAnalyzingOcr = true
       ocrStepNumber = 1
@@ -137,6 +154,7 @@ fun AddHealthRecordScreen(
             ocrStepMessage = msg
           }
         )
+        repository.recordOcrScanUsage()
         applyAutoFillResult(result)
       } catch (e: Exception) {
         Toast.makeText(context, "OCR Analysis failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -152,6 +170,49 @@ fun AddHealthRecordScreen(
     if (bitmap != null) {
       val name = "Camera_Capture_${System.currentTimeMillis().toString().takeLast(4)}.jpg"
       runOcrPipeline(null, bitmap, null, name)
+    } else {
+      // Photo capture cancelled or null on emulator -> switch gracefully to document scanner
+      Toast.makeText(context, "No camera photo captured. Opening document scanner.", Toast.LENGTH_SHORT).show()
+      showDocumentScannerModal = true
+    }
+  }
+
+  fun launchCameraSafely() {
+    try {
+      val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+      val pm = context.packageManager
+      val hasCameraActivity = takePictureIntent.resolveActivity(pm) != null ||
+          pm.queryIntentActivities(takePictureIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
+
+      if (hasCameraActivity) {
+        cameraCaptureLauncher.launch(null)
+      } else {
+        Toast.makeText(context, "System camera app unavailable. Opening document scanner.", Toast.LENGTH_SHORT).show()
+        showDocumentScannerModal = true
+      }
+    } catch (e: ActivityNotFoundException) {
+      Log.e("AddHealthRecord", "No camera activity found", e)
+      Toast.makeText(context, "No camera application found. Opening document scanner.", Toast.LENGTH_SHORT).show()
+      showDocumentScannerModal = true
+    } catch (e: SecurityException) {
+      Log.e("AddHealthRecord", "Camera permission denied by system", e)
+      Toast.makeText(context, "Camera permission needed. Opening document scanner.", Toast.LENGTH_SHORT).show()
+      showDocumentScannerModal = true
+    } catch (e: Exception) {
+      Log.e("AddHealthRecord", "Failed to launch camera", e)
+      Toast.makeText(context, "Camera unavailable. Opening document scanner.", Toast.LENGTH_SHORT).show()
+      showDocumentScannerModal = true
+    }
+  }
+
+  val cameraPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { isGranted: Boolean ->
+    if (isGranted) {
+      launchCameraSafely()
+    } else {
+      Toast.makeText(context, "Camera permission not granted. Opening document scanner.", Toast.LENGTH_SHORT).show()
+      showDocumentScannerModal = true
     }
   }
 
@@ -294,7 +355,7 @@ fun AddHealthRecordScreen(
           ) {
             Icon(
               imageVector = Icons.Default.DocumentScanner,
-              contentDescription = "Scan / OCR with Gemini AI",
+              contentDescription = "Scan / OCR with Vitalith AI",
               tint = VitalTealPrimary
             )
           }
@@ -374,59 +435,61 @@ fun AddHealthRecordScreen(
           modifier = Modifier.padding(14.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(36.dp)
-                  .background(VitalTealPrimary.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
+          ResponsiveWrapRow(
+            leftContent = {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
               ) {
-                Icon(
-                  imageVector = Icons.Default.AutoAwesome,
-                  contentDescription = null,
-                  tint = VitalTealPrimary,
-                  modifier = Modifier.size(20.dp)
-                )
+                Box(
+                  modifier = Modifier
+                    .size(36.dp)
+                    .background(VitalTealPrimary.copy(alpha = 0.15f), CircleShape),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = VitalTealPrimary,
+                    modifier = Modifier.size(20.dp)
+                  )
+                }
+                Column {
+                  Text(
+                    text = "Vitalith AI • Smart Document OCR",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    text = "Capture or upload to auto-fill form instantly",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
               }
-              Column {
+            },
+            rightContent = {
+              Surface(
+                color = VitalTealContainer,
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.testTag("ocr_multimodal_ai_badge")
+              ) {
                 Text(
-                  text = "Gemini AI • Smart Document OCR",
+                  text = "Multimodal AI",
+                  fontSize = 10.sp,
                   fontWeight = FontWeight.Bold,
-                  fontSize = 14.sp,
-                  color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                  text = "Capture or upload to auto-fill form instantly",
-                  fontSize = 11.sp,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  color = VitalOnTealContainer,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
               }
-            }
-
-            Surface(
-              color = VitalTealContainer,
-              shape = RoundedCornerShape(6.dp)
-            ) {
-              Text(
-                text = "Multimodal AI",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = VitalOnTealContainer,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-              )
-            }
-          }
+            },
+            horizontalSpacing = 8.dp,
+            verticalSpacing = 6.dp
+          )
 
           Text(
-            text = "Snap a photo of a lab report, prescription bottle, or clinical notes. Gemini AI will extract test names, reference ranges, provider info, and pre-populate this form.",
+            text = "Snap a photo of a lab report, prescription bottle, or clinical notes. Vitalith AI will extract test names, reference ranges, provider info, and pre-populate this form.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 16.sp
@@ -1049,7 +1112,7 @@ fun AddHealthRecordScreen(
           verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
           Text(
-            text = "Choose how to capture your medical document. Gemini AI will analyze the content, extract clinical values, and pre-populate this form automatically.",
+            text = "Choose how to capture your medical document. Vitalith AI will analyze the content, extract clinical values, and pre-populate this form automatically.",
             fontSize = 12.5.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -1062,7 +1125,21 @@ fun AddHealthRecordScreen(
               .fillMaxWidth()
               .clickable {
                 showOcrOptionsModal = false
-                cameraCaptureLauncher.launch(null)
+                try {
+                  val hasCameraPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA
+                  ) == PackageManager.PERMISSION_GRANTED
+
+                  if (hasCameraPermission) {
+                    launchCameraSafely()
+                  } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                  }
+                } catch (e: Exception) {
+                  Log.e("AddHealthRecord", "Error starting camera flow", e)
+                  showDocumentScannerModal = true
+                }
               }
               .testTag("ocr_option_camera")
           ) {
@@ -1082,6 +1159,37 @@ fun AddHealthRecordScreen(
               Column {
                 Text("Take Photo with Camera", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                 Text("Snap a picture of a lab sheet or prescription bottle", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+              }
+            }
+          }
+
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable {
+                showOcrOptionsModal = false
+                showDocumentScannerModal = true
+              }
+              .testTag("ocr_option_scanner")
+          ) {
+            Row(
+              modifier = Modifier.padding(12.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(40.dp)
+                  .background(VitalTealPrimaryDark, CircleShape),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(Icons.Default.DocumentScanner, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+              }
+              Column {
+                Text("Clinical Document Scanner Viewfinder", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                Text("Optical lens simulator with live reticle alignment", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
           }
@@ -1202,6 +1310,232 @@ fun AddHealthRecordScreen(
     )
   }
 
+  // Interactive Clinical Document Camera Scanner Dialog
+  if (showDocumentScannerModal) {
+    val presets = GeminiFormOcrAnalyzer.CLINICAL_PRESETS
+    val activePreset = presets.getOrElse(selectedScannerPresetIndex) { presets.first() }
+
+    AlertDialog(
+      onDismissRequest = { showDocumentScannerModal = false },
+      title = {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(34.dp)
+                .background(VitalTealPrimary, CircleShape),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            Column {
+              Text("Document Camera Scanner", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+              Text("Optical Capture & Vitalith AI OCR", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
+          IconButton(onClick = { showDocumentScannerModal = false }) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      },
+      text = {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+          // Document Specimen Selector Chips
+          Text(
+            text = "CHOOSE CLINICAL DOCUMENT IN VIEW:",
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = VitalTealPrimary,
+            letterSpacing = 0.5.sp
+          )
+
+          LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            items(presets.indices.toList()) { idx ->
+              val p = presets[idx]
+              val isSelected = selectedScannerPresetIndex == idx
+              FilterChip(
+                selected = isSelected,
+                onClick = { selectedScannerPresetIndex = idx },
+                label = {
+                  Text(
+                    text = when (p.id) {
+                      "preset_cmp" -> "Metabolic (CMP)"
+                      "preset_lipid" -> "Lipid Panel"
+                      "preset_rx" -> "Prescription Rx"
+                      "preset_cbc" -> "CBC Count"
+                      else -> p.title.take(15)
+                    },
+                    fontSize = 11.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                  )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                  selectedContainerColor = VitalTealContainer,
+                  selectedLabelColor = VitalOnTealContainer
+                )
+              )
+            }
+          }
+
+          // Camera Viewfinder Box
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(230.dp)
+              .clip(RoundedCornerShape(14.dp))
+              .background(Color(0xFF0F172A))
+              .border(2.dp, VitalTealPrimary.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+              .padding(10.dp)
+          ) {
+            // Document inside viewfinder
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = Color.White,
+              modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp)
+            ) {
+              Column(
+                modifier = Modifier
+                  .padding(10.dp)
+                  .verticalScroll(rememberScrollState())
+              ) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = activePreset.provider.take(28),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                  )
+                  Surface(
+                    color = Color(0xFFE2E8F0),
+                    shape = RoundedCornerShape(3.dp)
+                  ) {
+                    Text(
+                      text = "CLINICAL SPECIMEN",
+                      fontSize = 8.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = Color(0xFF475569),
+                      modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                  }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                  text = activePreset.title,
+                  fontSize = 11.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = VitalTealPrimaryDark
+                )
+                Text(
+                  text = activePreset.subtitle,
+                  fontSize = 9.sp,
+                  color = Color.DarkGray
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFCBD5E1))
+                Text(
+                  text = activePreset.sampleText.take(200) + "...",
+                  fontSize = 8.5.sp,
+                  fontFamily = FontFamily.Monospace,
+                  color = Color(0xFF334155),
+                  lineHeight = 12.sp
+                )
+              }
+            }
+
+            // Green Camera Framing Reticle Overlay
+            Box(
+              modifier = Modifier
+                .fillMaxSize()
+                .border(1.5.dp, VitalEmeraldSuccess.copy(alpha = 0.7f), RoundedCornerShape(8.dp)),
+              contentAlignment = Alignment.TopCenter
+            ) {
+              Surface(
+                color = Color.Black.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                  Box(modifier = Modifier.size(6.dp).background(VitalEmeraldSuccess, CircleShape))
+                  Text(
+                    text = "ALIGN DOCUMENT IN RETICLE",
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                  )
+                }
+              }
+            }
+          }
+
+          // Shutter Action Button
+          Button(
+            onClick = {
+              showDocumentScannerModal = false
+              runOcrPipeline(null, null, activePreset, "${activePreset.id}_camera_scan.jpg")
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(48.dp)
+              .testTag("scanner_capture_button")
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Icon(Icons.Default.Camera, contentDescription = null, tint = Color.White)
+              Text("Capture Document & Run Vitalith OCR", fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+            }
+          }
+
+          // Gallery Secondary Action
+          OutlinedButton(
+            onClick = {
+              showDocumentScannerModal = false
+              pickMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+              Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+              Text("Or Pick Image From Gallery", fontSize = 12.5.sp)
+            }
+          }
+        }
+      },
+      confirmButton = {},
+      dismissButton = {}
+    )
+  }
+
   // OCR & Gemini Analysis Progress Dialog
   if (isAnalyzingOcr) {
     AlertDialog(
@@ -1217,7 +1551,7 @@ fun AddHealthRecordScreen(
             strokeWidth = 2.5.dp
           )
           Text(
-            text = "Gemini AI Document Analysis",
+            text = "Vitalith AI Document Analysis",
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
           )
@@ -1268,6 +1602,35 @@ fun AddHealthRecordScreen(
         }
       },
       confirmButton = {}
+    )
+  }
+
+  if (showOcrQuotaDialog) {
+    AlertDialog(
+      onDismissRequest = { showOcrQuotaDialog = false },
+      title = { Text("Monthly Document OCR Limit Reached", fontWeight = FontWeight.Bold) },
+      text = {
+        Text(
+          "Free tier accounts include 2 automated OCR document scans per month. Upgrade to Vitalith Plus or Concierge for unlimited optical extraction.",
+          fontSize = 13.sp
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showOcrQuotaDialog = false
+            onNavigateToSubscription()
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary)
+        ) {
+          Text("Upgrade Plan", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showOcrQuotaDialog = false }) {
+          Text("Later")
+        }
+      }
     )
   }
 }

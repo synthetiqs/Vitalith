@@ -25,6 +25,7 @@ import com.example.data.model.PatientProfile
 import com.example.data.model.SubscriptionTier
 import com.example.data.model.UserProfile
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 import com.example.util.PatientAgeCalculator
 import java.util.Calendar
@@ -369,70 +370,89 @@ private fun PatientProfilesTabContent(
     contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    // Active Profile Status Card
+    // Active Profile Status & Quick Switch Card
     if (activeProfile != null) {
       item {
         Card(
-          colors = CardDefaults.cardColors(containerColor = VitalTealContainer.copy(alpha = 0.5f)),
+          colors = CardDefaults.cardColors(containerColor = VitalTealContainer.copy(alpha = 0.45f)),
           shape = RoundedCornerShape(16.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
-          Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Box(
-              modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(VitalTealPrimary),
-              contentAlignment = Alignment.Center
+          Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Text(
-                text = activeProfile.name.take(1),
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-              )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              Box(
+                modifier = Modifier
+                  .size(44.dp)
+                  .clip(CircleShape)
+                  .background(VitalTealPrimary),
+                contentAlignment = Alignment.Center
+              ) {
                 Text(
-                  text = "ACTIVE PROFILE",
-                  fontSize = 11.sp,
-                  fontWeight = FontWeight.ExtraBold,
-                  color = VitalTealPrimary
+                  text = activeProfile.name.take(1),
+                  color = Color.White,
+                  fontSize = 20.sp,
+                  fontWeight = FontWeight.Bold
                 )
-                Surface(
-                  shape = RoundedCornerShape(4.dp),
-                  color = VitalEmeraldContainer
-                ) {
+              }
+              Spacer(modifier = Modifier.width(14.dp))
+              Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                   Text(
-                    text = "Live Sync",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = VitalOnEmeraldContainer,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    text = "ACTIVE PROFILE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = VitalTealPrimary
                   )
+                  Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = VitalEmeraldContainer
+                  ) {
+                    Text(
+                      text = "Live Sync",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = VitalOnEmeraldContainer,
+                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                  }
                 }
+                Text(
+                  text = activeProfile.name,
+                  fontSize = 18.sp,
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                val activeAgeStr = remember(activeProfile.dob) {
+                  val years = PatientAgeCalculator.calculateAgeYears(activeProfile.dob)
+                  if (years != null) " • Age: $years yrs" else ""
+                }
+                Text(
+                  text = "${activeProfile.relationship} • MRN: ${activeProfile.mrn}$activeAgeStr • Blood: ${activeProfile.bloodType}",
+                  fontSize = 12.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
               }
-              Text(
-                text = activeProfile.name,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-              val activeAgeStr = remember(activeProfile.dob) {
-                val years = PatientAgeCalculator.calculateAgeYears(activeProfile.dob)
-                if (years != null) " • Age: $years yrs" else ""
-              }
-              Text(
-                text = "${activeProfile.relationship} • MRN: ${activeProfile.mrn}$activeAgeStr • Blood: ${activeProfile.bloodType}",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+              text = "SWITCH PATIENT PROFILE:",
+              fontSize = 11.sp,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            PatientProfileDropdownSelector(
+              profiles = profiles,
+              currentProfileId = currentProfileId,
+              onSwitchProfile = onSwitchProfile,
+              isFullWidth = true,
+              modifier = Modifier.testTag("profile_mgmt_dropdown_selector")
+            )
           }
         }
       }
@@ -912,6 +932,10 @@ private fun UserAccountTabContent(
             Switch(
               checked = userProfile.biometricLockEnabled,
               onCheckedChange = onToggleBiometrics,
+              colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = MaterialTheme.colorScheme.primary
+              ),
               modifier = Modifier.testTag("biometric_lock_toggle")
             )
           }

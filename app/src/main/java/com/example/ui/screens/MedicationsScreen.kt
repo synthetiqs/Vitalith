@@ -40,7 +40,9 @@ import com.example.data.model.Provenance
 import com.example.data.repository.VitalithRepository
 import com.example.notification.MedicationNotificationHelper
 import com.example.ui.components.MedicalTermExplainerModal
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.components.ProvenanceBadge
+import com.example.ui.components.ResponsiveWrapRow
 import com.example.ui.theme.*
 import java.util.UUID
 
@@ -51,8 +53,20 @@ fun MedicationsScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val profiles by repository.profiles.collectAsState()
+  val currentProfileId by repository.currentProfileId.collectAsState()
+  val currentProfile = remember(profiles, currentProfileId) {
+    profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
+  }
   val medications by repository.medications.collectAsState()
   val reminders by repository.reminders.collectAsState()
+
+  val profileMedications = remember(medications, currentProfileId) {
+    medications.filter { it.profileId == currentProfileId }
+  }
+  val profileReminders = remember(reminders, currentProfileId) {
+    reminders.filter { it.profileId == currentProfileId }
+  }
 
   var selectedTab by remember { mutableIntStateOf(0) } // 0: Prescriptions, 1: Daily Alerts
 
@@ -84,11 +98,57 @@ fun MedicationsScreen(
     }
   }
 
-  val activeMeds = medications.filter { it.status == ItemStatus.ACTIVE }
-  val discontinuedMeds = medications.filter { it.status == ItemStatus.DISCONTINUED }
+  val activeMeds = profileMedications.filter { it.status == ItemStatus.ACTIVE }
+  val discontinuedMeds = profileMedications.filter { it.status == ItemStatus.DISCONTINUED }
 
-  val enabledRemindersCount = reminders.count { it.isEnabled }
-  val takenTodayCount = reminders.count { it.isTakenToday }
+  val enabledRemindersCount = profileReminders.count { it.isEnabled }
+  val takenTodayCount = profileReminders.count { it.isTakenToday }
+
+  val interactionWarning: Pair<String, String>? = remember(activeMeds, currentProfile) {
+    val medNames = activeMeds.map { it.name.lowercase() }
+    val allergies = (currentProfile?.allergies ?: emptyList()).map { it.lowercase() }
+
+    val hasAtorva = medNames.any { it.contains("atorvastatin") }
+    val hasMetformin = medNames.any { it.contains("metformin") }
+    val hasClopidogrel = medNames.any { it.contains("clopidogrel") }
+    val hasAspirinOrEmpa = medNames.any { it.contains("aspirin") || it.contains("empagliflozin") }
+    val hasEpiOrCetirizine = medNames.any { it.contains("epinephrine") || it.contains("cetirizine") }
+    val hasPeanutAllergy = allergies.any { it.contains("peanut") }
+
+    when {
+      hasAtorva && hasMetformin -> {
+        Pair(
+          "Clinical Interaction Watch (Atorvastatin + Metformin)",
+          "Routine 6-month hepatic (LFT) panel recommended when co-administering statins with metformin."
+        )
+      }
+      hasClopidogrel && hasAspirinOrEmpa -> {
+        Pair(
+          "Cardiovascular & Renal Monitoring Notice (Clopidogrel + Therapy)",
+          "Monitor renal perfusion (eGFR/Cr) and bleeding risk with concurrent antiplatelet and SGLT2 inhibitor therapy."
+        )
+      }
+      hasEpiOrCetirizine && hasPeanutAllergy -> {
+        Pair(
+          "Anaphylaxis Action Plan & Epinephrine Readiness",
+          "Active allergy to Peanuts documented. Maintain unexpired Epinephrine auto-injector readiness and emergency protocol."
+        )
+      }
+      else -> {
+        val allergyConflict = activeMeds.firstOrNull { med ->
+          allergies.any { med.name.lowercase().contains(it) || it.contains(med.name.lowercase()) }
+        }
+        if (allergyConflict != null) {
+          Pair(
+            "Potential Allergy Conflict (${allergyConflict.name})",
+            "Patient has documented hypersensitivity matching active medication ${allergyConflict.name}."
+          )
+        } else {
+          null
+        }
+      }
+    }
+  }
 
   Box(
     modifier = modifier
@@ -110,7 +170,7 @@ fun MedicationsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
               Text(
                 text = "Medications & Reminders",
                 fontSize = 20.sp,
@@ -122,7 +182,16 @@ fun MedicationsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
               )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              PatientProfileDropdownSelector(
+                profiles = profiles,
+                currentProfileId = currentProfileId,
+                onSwitchProfile = { repository.switchProfile(it) },
+                testTagPrefix = "meds_profile_selector"
+              )
               IconButton(
                 onClick = {
                   if (selectedTab == 0) {
@@ -190,63 +259,98 @@ fun MedicationsScreen(
         ) {
           // Reconciliation Status Banner
           item {
-            Card(
-              colors = CardDefaults.cardColors(containerColor = VitalEmeraldContainer.copy(alpha = 0.5f)),
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier.fillMaxWidth()
-            ) {
-              Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            val allReconciled = activeMeds.isNotEmpty() && activeMeds.all { it.isReconciled }
+            val unreconciledCount = activeMeds.count { !it.isReconciled }
+
+            if (allReconciled) {
+              Card(
+                colors = CardDefaults.cardColors(containerColor = VitalEmeraldContainer.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().testTag("med_reconciliation_banner")
               ) {
-                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = VitalEmeraldSuccess)
-                Column {
-                  Text(
-                    text = "All Active Regimens Reconciled",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = VitalOnEmeraldContainer
-                  )
-                  Text(
-                    text = "Cross-referenced against Epic & Quest FHIR endpoints.",
-                    fontSize = 11.sp,
-                    color = VitalOnEmeraldContainer
-                  )
+                Row(
+                  modifier = Modifier.padding(12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = VitalEmeraldSuccess)
+                  Column {
+                    Text(
+                      text = "All Active Regimens Reconciled",
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 13.sp,
+                      color = VitalOnEmeraldContainer
+                    )
+                    Text(
+                      text = "Cross-referenced against Epic & Quest FHIR endpoints.",
+                      fontSize = 11.sp,
+                      color = VitalOnEmeraldContainer
+                    )
+                  }
+                }
+              }
+            } else if (unreconciledCount > 0) {
+              Card(
+                colors = CardDefaults.cardColors(containerColor = VitalWarningContainer.copy(alpha = 0.45f)),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, VitalWarningOrange.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth().testTag("med_unreconciled_banner")
+              ) {
+                Row(
+                  modifier = Modifier.padding(12.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  Icon(imageVector = Icons.Default.WarningAmber, contentDescription = null, tint = VitalWarningOrange)
+                  Column {
+                    Text(
+                      text = "$unreconciledCount Prescription(s) Pending Clinical Reconciliation",
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 13.sp,
+                      color = VitalWarningOrange
+                    )
+                    Text(
+                      text = "Tap a medication card below and click 'Reconcile' to verify dosage with health records.",
+                      fontSize = 11.sp,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                  }
                 }
               }
             }
           }
 
           // Clinical Interaction Banner
-          item {
-            Card(
-              colors = CardDefaults.cardColors(containerColor = VitalWarningContainer.copy(alpha = 0.4f)),
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, VitalWarningOrange.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-            ) {
-              Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+          if (interactionWarning != null) {
+            item {
+              Card(
+                colors = CardDefaults.cardColors(containerColor = VitalWarningContainer.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .border(1.dp, VitalWarningOrange.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
               ) {
-                Icon(imageVector = Icons.Default.WarningAmber, contentDescription = null, tint = VitalWarningOrange)
-                Column {
-                  Text(
-                    text = "Clinical Interaction Watch (Atorvastatin + Metformin)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = Color(0xFF7C2D12)
-                  )
-                  Spacer(modifier = Modifier.height(2.dp))
-                  Text(
-                    text = "Routine 6-month hepatic (LFT) panel recommended when co-administering statins with metformin.",
-                    fontSize = 11.sp,
-                    color = Color(0xFF7C2D12),
-                    lineHeight = 15.sp
-                  )
+                Row(
+                  modifier = Modifier.padding(12.dp),
+                  verticalAlignment = Alignment.Top,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  Icon(imageVector = Icons.Default.WarningAmber, contentDescription = null, tint = VitalWarningOrange)
+                  Column {
+                    Text(
+                      text = interactionWarning.first,
+                      fontWeight = FontWeight.Bold,
+                      fontSize = 12.sp,
+                      color = Color(0xFF7C2D12)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                      text = interactionWarning.second,
+                      fontSize = 11.sp,
+                      color = Color(0xFF7C2D12),
+                      lineHeight = 15.sp
+                    )
+                  }
                 }
               }
             }
@@ -417,14 +521,14 @@ fun MedicationsScreen(
                     Text(text = "Today's Adherence", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                   }
                   Text(
-                    text = "$takenTodayCount of ${reminders.size} doses logged",
+                    text = "$takenTodayCount of ${profileReminders.size} doses logged",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp,
                     color = VitalTealPrimary
                   )
                 }
 
-                val progress = if (reminders.isNotEmpty()) takenTodayCount.toFloat() / reminders.size else 0f
+                val progress = if (profileReminders.isNotEmpty()) takenTodayCount.toFloat() / profileReminders.size else 0f
                 LinearProgressIndicator(
                   progress = { progress },
                   color = VitalTealPrimary,
@@ -446,7 +550,7 @@ fun MedicationsScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = "Recurring Daily Treatment Alerts (${reminders.size})",
+                text = "Recurring Daily Treatment Alerts (${profileReminders.size})",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
               )
@@ -468,7 +572,7 @@ fun MedicationsScreen(
             }
           }
 
-          if (reminders.isEmpty()) {
+          if (profileReminders.isEmpty()) {
             item {
               Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -489,7 +593,7 @@ fun MedicationsScreen(
               }
             }
           } else {
-            items(reminders, key = { it.id }) { reminder ->
+            items(profileReminders, key = { it.id }) { reminder ->
               ReminderCard(
                 reminder = reminder,
                 onToggle = { isEnabled ->
@@ -545,6 +649,7 @@ fun MedicationsScreen(
   // Dialog: Add Medication
   if (showAddMedDialog) {
     AddMedicationDialog(
+      profileId = currentProfileId,
       onDismiss = { showAddMedDialog = false },
       onSave = { med ->
         repository.addMedication(med)
@@ -597,7 +702,7 @@ fun MedicationsScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
               Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = VitalTealPrimary, modifier = Modifier.size(16.dp))
               Text(
-                text = "Tap Medical Term for Gemini AI Explanation",
+                text = "Tap Medical Term for Vitalith AI Explanation",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = VitalOnTealContainer
@@ -1034,22 +1139,25 @@ fun MedicationCard(
 
       Spacer(modifier = Modifier.height(6.dp))
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-      ) {
-        Text(
-          text = "For: ${med.indication}",
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Medium,
-          color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-          text = "Rx: ${med.prescriber}",
-          fontSize = 11.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
+      ResponsiveWrapRow(
+        leftContent = {
+          Text(
+            text = "For: ${med.indication}",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary
+          )
+        },
+        rightContent = {
+          Text(
+            text = "Rx: ${med.prescriber}",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        },
+        horizontalSpacing = 8.dp,
+        verticalSpacing = 4.dp
+      )
 
       med.conflictWarning?.let { warning ->
         Spacer(modifier = Modifier.height(8.dp))
@@ -1126,6 +1234,7 @@ fun DetailRow(label: String, value: String) {
 
 @Composable
 fun AddMedicationDialog(
+  profileId: String,
   onDismiss: () -> Unit,
   onSave: (MedicationItem) -> Unit
 ) {
@@ -1188,7 +1297,7 @@ fun AddMedicationDialog(
           if (name.isNotBlank() && dosage.isNotBlank()) {
             val newMed = MedicationItem(
               id = "med_${UUID.randomUUID().toString().take(8)}",
-              profileId = "profile_doug",
+              profileId = profileId,
               name = name.trim(),
               dosage = dosage.trim(),
               frequency = frequency.trim().ifEmpty { "Daily" },

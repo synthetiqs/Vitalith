@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AuditEntry
-import com.example.data.model.SubscriptionTier
 import com.example.data.repository.VitalithRepository
 import com.example.ui.theme.*
 
@@ -32,10 +31,11 @@ import kotlinx.coroutines.launch
 fun PrivacyAuditScreen(
   repository: VitalithRepository,
   authService: AuthService? = null,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onNavigateBack: () -> Unit = {}
 ) {
   val auditLogs by repository.auditLogs.collectAsState()
-  val subscriptionTier by repository.subscriptionTier.collectAsState()
+  val userProfile by repository.userProfile.collectAsState()
   val currentUser = authService?.currentUser?.collectAsState()?.value
   val authState = authService?.uiState?.collectAsState()?.value
   val coroutineScope = rememberCoroutineScope()
@@ -60,17 +60,33 @@ fun PrivacyAuditScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
-          Text(
-            text = "Privacy, Security & Audit",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-          )
-          Text(
-            text = "Patient-Owned • Immutable Access Logs • FHIR Export",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          modifier = Modifier.weight(1f)
+        ) {
+          IconButton(
+            onClick = onNavigateBack,
+            modifier = Modifier.testTag("back_button")
+          ) {
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = "Back",
+              tint = MaterialTheme.colorScheme.onSurface
+            )
+          }
+          Column {
+            Text(
+              text = "Privacy, Security & Audit",
+              fontSize = 19.sp,
+              fontWeight = FontWeight.Bold
+            )
+            Text(
+              text = "Patient-Owned • Immutable Logs",
+              fontSize = 11.5.sp,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
         }
         FilledTonalButton(
           onClick = { showExportModal = true },
@@ -110,13 +126,13 @@ fun PrivacyAuditScreen(
                 Column {
                   Text(text = "Patient Account Identity", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                   Text(
-                    text = currentUser?.displayName ?: "Doug Adarkwah",
+                    text = currentUser?.displayName ?: userProfile.fullName,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                   )
                   Text(
-                    text = currentUser?.email ?: "doug@synthetiqs.health",
+                    text = currentUser?.email ?: userProfile.email,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
@@ -241,50 +257,6 @@ fun PrivacyAuditScreen(
         }
       }
 
-      // Subscription Tier Selector (Entitlements)
-      item {
-        Card(
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          shape = RoundedCornerShape(12.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Text(text = "Subscription Plan & Entitlements", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              PlanOptionTile(
-                name = "Free",
-                price = "$0",
-                features = "1 Profile • Basic Storage",
-                isSelected = subscriptionTier == SubscriptionTier.FREE,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.FREE) },
-                modifier = Modifier.weight(1f)
-              )
-              PlanOptionTile(
-                name = "Premium",
-                price = "$14.99/mo",
-                features = "Unlimited AI • Family Profiles",
-                isSelected = subscriptionTier == SubscriptionTier.PREMIUM,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.PREMIUM) },
-                modifier = Modifier.weight(1f)
-              )
-              PlanOptionTile(
-                name = "Premium+",
-                price = "$49/mo",
-                features = "Navigator • Clinician Review",
-                isSelected = subscriptionTier == SubscriptionTier.PREMIUM_PLUS,
-                onSelect = { repository.setSubscriptionTier(SubscriptionTier.PREMIUM_PLUS) },
-                modifier = Modifier.weight(1f)
-              )
-            }
-          }
-        }
-      }
-
       // Immutable Audit Logs Section
       item {
         Row(
@@ -369,45 +341,6 @@ fun PrivacyAuditScreen(
         }
       }
     )
-  }
-}
-
-@Composable
-fun PlanOptionTile(
-  name: String,
-  price: String,
-  features: String,
-  isSelected: Boolean,
-  onSelect: () -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Surface(
-    color = if (isSelected) VitalTealContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-    shape = RoundedCornerShape(8.dp),
-    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, VitalTealPrimary) else null,
-    modifier = modifier.clickable(onClick = onSelect)
-  ) {
-    Column(modifier = Modifier.padding(10.dp)) {
-      Text(
-        text = name,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = if (isSelected) VitalOnTealContainer else MaterialTheme.colorScheme.onSurface
-      )
-      Text(
-        text = price,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.ExtraBold,
-        color = if (isSelected) VitalTealPrimary else MaterialTheme.colorScheme.primary
-      )
-      Spacer(modifier = Modifier.height(4.dp))
-      Text(
-        text = features,
-        fontSize = 9.sp,
-        color = if (isSelected) VitalOnTealContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        lineHeight = 12.sp
-      )
-    }
   }
 }
 

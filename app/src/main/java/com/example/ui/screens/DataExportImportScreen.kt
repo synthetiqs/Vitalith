@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 import com.example.util.ClinicalPdfGenerator
 import kotlinx.coroutines.launch
@@ -48,6 +49,13 @@ fun DataExportImportScreen(
   val currentProfileId by repository.currentProfileId.collectAsState()
   val currentProfile = remember(profiles, currentProfileId) {
     profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
+  }
+
+  val profileTimelineItems = remember(timelineItems, currentProfileId) {
+    timelineItems.filter { it.profileId == currentProfileId }
+  }
+  val profileMedications = remember(medications, currentProfileId) {
+    medications.filter { it.profileId == currentProfileId }
   }
 
   var showCustomFhirImportDialog by remember { mutableStateOf(false) }
@@ -81,12 +89,12 @@ fun DataExportImportScreen(
       val pdfFile = ClinicalPdfGenerator.generateFullArchivePdf(
         context = context,
         profile = currentProfile,
-        timelineItems = timelineItems,
-        medications = medications
+        timelineItems = profileTimelineItems,
+        medications = profileMedications
       )
       repository.recordAudit(
         action = "PDF_ARCHIVE_EXPORT",
-        resource = "Exported Comprehensive Longitudinal Health Record PDF (${timelineItems.size} items, ${medications.size} meds)"
+        resource = "Exported Comprehensive Longitudinal Health Record PDF for ${currentProfile?.name} (${profileTimelineItems.size} items, ${profileMedications.size} meds)"
       )
       ClinicalPdfGenerator.shareFile(
         context = context,
@@ -132,6 +140,14 @@ fun DataExportImportScreen(
               contentDescription = "Back to Settings"
             )
           }
+        },
+        actions = {
+          PatientProfileDropdownSelector(
+            profiles = profiles,
+            currentProfileId = currentProfileId,
+            onSwitchProfile = { repository.switchProfile(it) },
+            testTagPrefix = "export_profile_selector"
+          )
         },
         colors = TopAppBarDefaults.topAppBarColors(
           containerColor = MaterialTheme.colorScheme.surface
@@ -189,26 +205,66 @@ fun DataExportImportScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text(text = "CURRENT VAULT INVENTORY", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Column {
-              Text(text = "${timelineItems.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-              Text(text = "Clinical Records", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column {
-              Text(text = "${medications.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-              Text(text = "Medications", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column {
-              Text(text = "${profiles.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-              Text(text = "Patient Profiles", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column {
-              Text(text = "FIPS 140-2", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = VitalEmeraldSuccess)
-              Text(text = "Security Level", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            text = "CURRENT PATIENT VAULT INVENTORY (${currentProfile?.name ?: "All"})",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+          )
+          BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            if (maxWidth < 520.dp) {
+              // 2-column layout when space is limited
+              Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "${profileTimelineItems.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Patient Records (${timelineItems.size} Total)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "${profileMedications.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Active Meds (${medications.size} Total)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                }
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "${profiles.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Family Profiles", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "FIPS 140-2", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = VitalEmeraldSuccess)
+                    Text(text = "Security Level", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                  }
+                }
+              }
+            } else {
+              // 4 columns in a single row when wide
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(text = "${profileTimelineItems.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                  Text(text = "Patient Records (${timelineItems.size} Total)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(text = "${profileMedications.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                  Text(text = "Active Meds (${medications.size} Total)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(text = "${profiles.size}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                  Text(text = "Family Profiles", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(text = "FIPS 140-2", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = VitalEmeraldSuccess)
+                  Text(text = "Security Level", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+              }
             }
           }
         }

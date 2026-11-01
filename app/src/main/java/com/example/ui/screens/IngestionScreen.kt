@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -34,9 +35,13 @@ import com.example.data.ocr.ClinicalOcrResult
 import com.example.data.ocr.ExtractedBiomarker
 import com.example.data.ocr.OcrStepProgress
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,16 +49,26 @@ import java.util.UUID
 fun IngestionScreen(
   repository: VitalithRepository,
   onNavigateToTimeline: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onNavigateBack: () -> Unit = {},
+  onNavigateToSubscription: () -> Unit = {},
+  onNavigateToWearables: () -> Unit = {}
 ) {
   val context = LocalContext.current
   val coroutineScope = rememberCoroutineScope()
+  val currentProfileId by repository.currentProfileId.collectAsState()
+  val profiles by repository.profiles.collectAsState()
+  val subscriptionTier by repository.subscriptionTier.collectAsState()
+  val currentProfile = remember(profiles, currentProfileId) {
+    profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
+  }
 
   var selectedTab by remember { mutableIntStateOf(0) }
-  val tabs = listOf("SMART on FHIR", "Lab PDF / OCR", "Manual Entry")
+  val tabs = listOf("SMART on FHIR", "Lab PDF / OCR", "Manual Entry", "Wearables (Fit)")
 
   var isSyncingFhir by remember { mutableStateOf(false) }
   var fhirSyncSuccess by remember { mutableStateOf<String?>(null) }
+  var showSubscriptionModal by remember { mutableStateOf(false) }
 
   var isRunningOcr by remember { mutableStateOf(false) }
   var currentOcrStep by remember { mutableStateOf<OcrStepProgress?>(null) }
@@ -62,30 +77,36 @@ fun IngestionScreen(
   var uploadedFileName by remember { mutableStateOf<String?>(null) }
 
   val runLiveClinicalOcr: (Uri?, Bitmap?, String) -> Unit = { uri, bitmap, sourceName ->
-    uploadedFileName = sourceName
-    coroutineScope.launch {
-      isRunningOcr = true
-      completedOcrResult = null
-      currentOcrStep = OcrStepProgress(
-        currentStep = 1,
-        stepTitle = "Cryptographic Provenance Hashing",
-        stepDetail = "Reading raw document bytes & computing SHA-256 checksum on $sourceName..."
-      )
+    if (!repository.canExecuteOcrScan()) {
+      showSubscriptionModal = true
+    } else {
+      uploadedFileName = sourceName
+      coroutineScope.launch {
+        isRunningOcr = true
+        completedOcrResult = null
+        currentOcrStep = OcrStepProgress(
+          currentStep = 1,
+          stepTitle = "Cryptographic Provenance Hashing",
+          stepDetail = "Reading raw document bytes & computing SHA-256 checksum on $sourceName..."
+        )
 
-      val result = ClinicalOcrPipeline.processDocument(
-        context = context,
-        uri = uri,
-        bitmap = bitmap,
-        sourceFileName = sourceName,
-        onProgress = { step ->
-          currentOcrStep = step
-        }
-      )
+        val result = ClinicalOcrPipeline.processDocument(
+          context = context,
+          uri = uri,
+          bitmap = bitmap,
+          sourceFileName = sourceName,
+          targetProfileId = currentProfileId,
+          onProgress = { step ->
+            currentOcrStep = step
+          }
+        )
 
-      // Add to repository (persists to Room database and creates audit log)
-      repository.addTimelineItem(result.timelineItem)
-      completedOcrResult = result
-      isRunningOcr = false
+        // Add to repository (persists to Room database and creates audit log)
+        repository.recordOcrScanUsage()
+        repository.addTimelineItem(result.timelineItem)
+        completedOcrResult = result
+        isRunningOcr = false
+      }
     }
   }
 
@@ -113,6 +134,8 @@ fun IngestionScreen(
     if (bitmap != null) {
       val name = "Camera_Capture_Lab_${System.currentTimeMillis() % 10000}.jpg"
       runLiveClinicalOcr(null, bitmap, name)
+    } else {
+      runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
     }
   }
 
@@ -120,7 +143,17 @@ fun IngestionScreen(
     contract = ActivityResultContracts.RequestPermission()
   ) { isGranted: Boolean ->
     if (isGranted) {
-      cameraCaptureLauncher.launch(null)
+      try {
+        val intent = android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+        val pm = context.packageManager
+        if (intent.resolveActivity(pm) != null || pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()) {
+          cameraCaptureLauncher.launch(null)
+        } else {
+          runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
+        }
+      } catch (_: Exception) {
+        runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
+      }
     } else {
       runLiveClinicalOcr(null, null, "Camera_Capture_Lab_Specimen.jpg")
     }
@@ -138,16 +171,47 @@ fun IngestionScreen(
       modifier = Modifier.fillMaxWidth()
     ) {
       Column(modifier = Modifier.padding(16.dp)) {
-        Text(
-          text = "Universal Ingestion Hub",
-          fontSize = 20.sp,
-          fontWeight = FontWeight.Bold
-        )
-        Text(
-          text = "Ingest from FHIR endpoints, PDF reports, or manual logs with provenance",
-          fontSize = 12.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.weight(1f)
+          ) {
+            IconButton(
+              onClick = onNavigateBack,
+              modifier = Modifier.testTag("back_button")
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onSurface
+              )
+            }
+            Column {
+              Text(
+                text = "Universal Ingestion Hub",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Text(
+                text = "FHIR endpoints, PDF reports, or manual logs",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+          PatientProfileDropdownSelector(
+            profiles = profiles,
+            currentProfileId = currentProfileId,
+            onSwitchProfile = { repository.switchProfile(it) },
+            onNavigateToSubscription = onNavigateToSubscription,
+            testTagPrefix = "ingestion_profile_selector"
+          )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         TabRow(selectedTabIndex = selectedTab) {
           tabs.forEachIndexed { index, title ->
@@ -233,6 +297,36 @@ fun IngestionScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                if (subscriptionTier == SubscriptionTier.FREE) {
+                  Card(
+                    colors = CardDefaults.cardColors(containerColor = VitalWarningContainer.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(bottom = 12.dp)
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(10.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                      Icon(Icons.Default.Lock, contentDescription = null, tint = VitalWarningOrange, modifier = Modifier.size(20.dp))
+                      Column(modifier = Modifier.weight(1f)) {
+                        Text("Premium Plan Required", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF7C2D12))
+                        Text("Live SMART-on-FHIR auto-sync requires an active Premium or Concierge plan.", fontSize = 11.sp, color = Color(0xFF7C2D12))
+                      }
+                      Button(
+                        onClick = onNavigateToSubscription,
+                        colors = ButtonDefaults.buttonColors(containerColor = VitalWarningOrange),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                      ) {
+                        Text("Upgrade", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                      }
+                    }
+                  }
+                }
+
                 if (isSyncingFhir) {
                   Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -246,33 +340,38 @@ fun IngestionScreen(
                 } else {
                   Button(
                     onClick = {
-                      coroutineScope.launch {
-                        isSyncingFhir = true
-                        fhirSyncSuccess = null
-                        delay(1200)
-                        val newItem = HealthTimelineItem(
-                          id = "tl_fhir_${UUID.randomUUID().toString().take(6)}",
-                          profileId = "profile_doug",
-                          category = TimelineCategory.LAB,
-                          title = "eGFR (Glomerular Filtration Rate): 102 mL/min",
-                          subtitle = "MetroHealth Epic • Ingested via US Core Observation",
-                          date = "Today",
-                          providerOrFacility = "MetroHealth Laboratories",
-                          status = ItemStatus.NORMAL,
-                          clinicalNotes = "Normal kidney filtration rate. Kidney health stable across past 12-month interval.",
-                          provenance = Provenance(
-                            sourceSystem = "Epic MyChart FHIR R4",
-                            ingestedAt = "Just now",
-                            confidenceScore = 1.0f,
-                            consentState = "Patient-Owned / Full Consent",
-                            documentHash = "sha256:8899aabbcc...1234"
-                          ),
-                          tags = listOf("Kidney", "eGFR", "Metabolic"),
-                          keyValues = mapOf("eGFR" to "102 mL/min", "Stage" to "Normal / G1")
-                        )
-                        repository.addTimelineItem(newItem)
-                        isSyncingFhir = false
-                        fhirSyncSuccess = "Successfully imported 1 DiagnosticReport (eGFR) and 2 Observations into Timeline!"
+                      if (subscriptionTier == SubscriptionTier.FREE) {
+                        showSubscriptionModal = true
+                      } else {
+                        coroutineScope.launch {
+                          isSyncingFhir = true
+                          fhirSyncSuccess = null
+                          delay(1200)
+                          val formattedDate = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date())
+                          val newItem = HealthTimelineItem(
+                            id = "tl_fhir_${UUID.randomUUID().toString().take(6)}",
+                            profileId = currentProfileId,
+                            category = TimelineCategory.LAB,
+                            title = "eGFR (Glomerular Filtration Rate): 102 mL/min",
+                            subtitle = "MetroHealth Epic • Ingested via US Core Observation",
+                            date = formattedDate,
+                            providerOrFacility = "MetroHealth Laboratories",
+                            status = ItemStatus.NORMAL,
+                            clinicalNotes = "Normal kidney filtration rate. Kidney health stable across past 12-month interval.",
+                            provenance = Provenance(
+                              sourceSystem = "Epic MyChart FHIR R4",
+                              ingestedAt = "Just now",
+                              confidenceScore = 1.0f,
+                              consentState = "Patient-Owned / Full Consent",
+                              documentHash = "sha256:8899aabbcc...1234"
+                            ),
+                            tags = listOf("Kidney", "eGFR", "Metabolic"),
+                            keyValues = mapOf("eGFR" to "102 mL/min", "Stage" to "Normal / G1")
+                          )
+                          repository.addTimelineItem(newItem)
+                          isSyncingFhir = false
+                          fhirSyncSuccess = "Successfully imported 1 DiagnosticReport (eGFR) and 2 Observations into Timeline!"
+                        }
                       }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary),
@@ -789,11 +888,11 @@ fun IngestionScreen(
                     if (entryTitle.isNotBlank()) {
                       val manualItem = HealthTimelineItem(
                         id = "tl_man_${UUID.randomUUID().toString().take(6)}",
-                        profileId = "profile_doug",
+                        profileId = currentProfileId,
                         category = entryCategory,
                         title = entryTitle,
                         subtitle = "Patient self-reported record",
-                        date = "Today",
+                        date = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date()),
                         providerOrFacility = entryFacility.ifBlank { "Patient Self-Report" },
                         status = ItemStatus.NORMAL,
                         clinicalNotes = entryNotes.ifBlank { "Recorded directly by patient in Vitalith app." },
@@ -834,6 +933,111 @@ fun IngestionScreen(
                       modifier = Modifier.padding(8.dp)
                     )
                   }
+                }
+              }
+            }
+          }
+        }
+
+        3 -> {
+        // Wearables & Google Fit Ingestion Tab
+        item {
+          Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth().testTag("ingestion_wearables_card")
+          ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                  Box(
+                    modifier = Modifier
+                      .size(42.dp)
+                      .clip(CircleShape)
+                      .background(Color(0xFF4285F4).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                  ) {
+                    Icon(
+                      imageVector = Icons.Default.WatchLater,
+                      contentDescription = null,
+                      tint = Color(0xFF1A73E8),
+                      modifier = Modifier.size(24.dp)
+                    )
+                  }
+                  Column {
+                    Text(
+                      text = "Google Fit & Wearables",
+                      fontSize = 16.sp,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                      text = "Pixel Watch, Fitbit, Galaxy Watch & Garmin",
+                      fontSize = 11.5.sp,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                  }
+                }
+
+                Surface(
+                  shape = RoundedCornerShape(6.dp),
+                  color = VitalEmeraldContainer
+                ) {
+                  Text(
+                    text = "ACTIVE",
+                    color = VitalEmeraldSuccess,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  )
+                }
+              }
+
+              Spacer(modifier = Modifier.height(14.dp))
+              Text(
+                text = "Connect Google Fit to import continuous 24-hour daily steps, active energy expenditure, resting heart rate, and cardiovascular training zones into ${currentProfile?.name ?: "Patient"}'s health record with cryptographic provenance.",
+                fontSize = 12.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 17.sp
+              )
+
+              Spacer(modifier = Modifier.height(16.dp))
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                OutlinedButton(
+                  onClick = {
+                    coroutineScope.launch {
+                      repository.syncWearableData(currentProfileId)
+                    }
+                  },
+                  shape = RoundedCornerShape(10.dp),
+                  modifier = Modifier.weight(1f).height(44.dp).testTag("ingest_tab_sync_button")
+                ) {
+                  Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text("Sync Now", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                  onClick = onNavigateToWearables,
+                  shape = RoundedCornerShape(10.dp),
+                  colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary),
+                  modifier = Modifier.weight(1f).height(44.dp).testTag("open_wearables_hub_button")
+                ) {
+                  Text("Open Hub", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
               }
             }
@@ -1011,4 +1215,33 @@ fun IngestionScreen(
       }
     }
   }
+
+  if (showSubscriptionModal) {
+    AlertDialog(
+      onDismissRequest = { showSubscriptionModal = false },
+      icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = VitalWarningOrange) },
+      title = { Text("Premium Feature") },
+      text = {
+        Text("Live SMART-on-FHIR auto-sync with Epic, Cerner, and hospital patient portals is available on Vitalith Premium and Concierge plans. Upgrade to enable automatic real-time electronic health records ingestion.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            showSubscriptionModal = false
+            onNavigateToSubscription()
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = VitalTealPrimary)
+        ) {
+          Text("Upgrade Plan")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showSubscriptionModal = false }) {
+          Text("Cancel")
+        }
+      }
+    )
+  }
 }
+}
+

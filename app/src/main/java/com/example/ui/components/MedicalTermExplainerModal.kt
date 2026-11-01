@@ -96,7 +96,7 @@ fun MedicalTermExplainerModal(
                 modifier = Modifier.size(13.dp)
               )
               Text(
-                text = "GEMINI AI MEDICAL INTERPRETER",
+                text = "VITALITH AI MEDICAL INTERPRETER",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = VitalOnTealContainer,
@@ -141,7 +141,7 @@ fun MedicalTermExplainerModal(
               strokeWidth = 3.dp
             )
             Text(
-              text = "Consulting Gemini AI Clinical Knowledge...",
+              text = "Consulting Vitalith AI Clinical Knowledge...",
               fontSize = 13.sp,
               fontWeight = FontWeight.SemiBold,
               color = VitalTealPrimary

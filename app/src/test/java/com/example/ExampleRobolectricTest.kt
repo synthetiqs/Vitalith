@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -385,8 +387,11 @@ class ExampleRobolectricTest {
     assertEquals(1, roomEntity.size)
     assertEquals("Serum Creatinine & eGFR", roomEntity.first().title)
     assertEquals("LAB", roomEntity.first().category)
-    assertEquals("Renal,Metabolic,Routine", roomEntity.first().tags)
-    assertEquals(true, roomEntity.first().keyValuesRaw.contains("Creatinine:0.88 mg/dL"))
+    val entity = roomEntity.first()
+    assertEquals(listOf("Renal", "Metabolic", "Routine"), entity.toDomain().tags)
+    assertEquals("0.88 mg/dL", entity.toDomain().keyValues["Creatinine"])
+    assertTrue(entity.tags.contains("Renal") && entity.tags.contains("Routine"))
+    assertTrue(entity.keyValuesRaw.contains("Creatinine") && entity.keyValuesRaw.contains("0.88"))
   }
 
   @Test
@@ -405,8 +410,8 @@ class ExampleRobolectricTest {
   @Test
   fun `verify medication reminder creation, toggling, marking taken, and deletion`() = runBlocking {
     val repository = com.example.data.repository.VitalithRepository(db)
-    val initialReminders = repository.reminders.first()
-    assertEquals(3, initialReminders.size)
+    val dougReminders = repository.reminders.first().filter { it.profileId == "profile_doug" }
+    assertEquals(3, dougReminders.size)
 
     val newReminder = com.example.data.model.MedicationReminder(
       id = "rem_test_daily",
@@ -422,7 +427,7 @@ class ExampleRobolectricTest {
     )
 
     repository.addMedicationReminder(newReminder)
-    val afterAdd = repository.reminders.first()
+    val afterAdd = repository.reminders.first().filter { it.profileId == "profile_doug" }
     assertEquals(4, afterAdd.size)
     assertEquals("12:30 PM", newReminder.formattedTime)
     assertEquals("Every Day", newReminder.recurrenceLabel)
@@ -439,9 +444,74 @@ class ExampleRobolectricTest {
 
     // Delete reminder
     repository.deleteMedicationReminder("rem_test_daily")
-    val afterDelete = repository.reminders.first()
+    val afterDelete = repository.reminders.first().filter { it.profileId == "profile_doug" }
     assertEquals(3, afterDelete.size)
     assertEquals(false, afterDelete.any { it.id == "rem_test_daily" })
+  }
+
+  @Test
+  fun `verify multi-patient data isolation across Doug, Maya, and Kwame`() = runBlocking<Unit> {
+    val repository = com.example.data.repository.VitalithRepository(db)
+    
+    // 1. Initial State: Doug
+    assertEquals("profile_doug", repository.currentProfileId.first())
+    val dougTimeline = repository.timelineItems.first().filter { it.profileId == "profile_doug" }
+    val dougMeds = repository.medications.first().filter { it.profileId == "profile_doug" }
+    val dougReminders = repository.reminders.first().filter { it.profileId == "profile_doug" }
+    assertEquals(6, dougTimeline.size)
+    assertEquals(4, dougMeds.size)
+    assertEquals(3, dougReminders.size)
+    val dougExportJson = repository.exportFhirBundleJson()
+    assertTrue(dougExportJson.contains("Doug Adarkwah"))
+    assertFalse(dougExportJson.contains("Maya Adarkwah"))
+    assertFalse(dougExportJson.contains("Kwame Adarkwah"))
+
+    // 2. Switch to Maya (Pediatric)
+    repository.switchProfile("profile_maya")
+    assertEquals("profile_maya", repository.currentProfileId.first())
+    val mayaTimeline = repository.timelineItems.first().filter { it.profileId == "profile_maya" }
+    val mayaMeds = repository.medications.first().filter { it.profileId == "profile_maya" }
+    val mayaReminders = repository.reminders.first().filter { it.profileId == "profile_maya" }
+    assertTrue(mayaTimeline.size >= 5)
+    assertTrue(mayaTimeline.any { it.title.contains("MMR") })
+    assertTrue(mayaTimeline.any { it.title.contains("Well-Child") })
+    assertTrue(mayaTimeline.any { it.title.contains("Peanut") })
+    assertTrue(mayaMeds.any { it.name.contains("Cetirizine") })
+    assertTrue(mayaMeds.any { it.name.contains("Multivitamin") })
+    assertEquals(1, mayaReminders.size)
+
+    val mayaExportJson = repository.exportFhirBundleJson()
+    assertTrue(mayaExportJson.contains("Maya Adarkwah"))
+    assertTrue(mayaExportJson.contains("VTL-4410-MA"))
+    assertFalse(mayaExportJson.contains("VTL-8921-DA"))
+    val mayaCsv = repository.exportMedicationsCsv()
+    assertTrue(mayaCsv.contains("Cetirizine"))
+    assertFalse(mayaCsv.contains("Metformin"))
+
+    // 3. Switch to Kwame (Geriatric Cardiology & Nephrology)
+    repository.switchProfile("profile_kwame")
+    assertEquals("profile_kwame", repository.currentProfileId.first())
+    val kwameTimeline = repository.timelineItems.first().filter { it.profileId == "profile_kwame" }
+    val kwameMeds = repository.medications.first().filter { it.profileId == "profile_kwame" }
+    val kwameReminders = repository.reminders.first().filter { it.profileId == "profile_kwame" }
+    assertTrue(kwameTimeline.size >= 5)
+    assertTrue(kwameTimeline.any { it.title.contains("Coronary Stent") })
+    assertTrue(kwameTimeline.any { it.title.contains("Renal Function") })
+    assertEquals(4, kwameMeds.size)
+    assertTrue(kwameMeds.any { it.name.contains("Empagliflozin") })
+    assertTrue(kwameMeds.any { it.name.contains("Clopidogrel") })
+    assertTrue(kwameMeds.any { it.name.contains("Amlodipine") })
+    assertTrue(kwameMeds.any { it.name.contains("Rosuvastatin") })
+    assertEquals(4, kwameReminders.size)
+
+    val kwameExportJson = repository.exportFhirBundleJson()
+    assertTrue(kwameExportJson.contains("Kwame Adarkwah"))
+    assertTrue(kwameExportJson.contains("VTL-1109-KA"))
+    assertFalse(kwameExportJson.contains("Maya Adarkwah"))
+    val kwameCsv = repository.exportMedicationsCsv()
+    assertTrue(kwameCsv.contains("Empagliflozin"))
+    assertTrue(kwameCsv.contains("Clopidogrel"))
+    assertFalse(kwameCsv.contains("Cetirizine"))
   }
 
   @Test
@@ -762,7 +832,7 @@ class ExampleRobolectricTest {
     val lastAiMsg = messages.last()
 
     assertEquals("ai", lastAiMsg.sender)
-    assertEquals(true, lastAiMsg.text.contains("GEMINI AI CLINICAL SUMMARY"))
+    assertEquals(true, lastAiMsg.text.contains("VITALITH AI CLINICAL SUMMARY"))
     assertEquals(true, lastAiMsg.text.contains("FLAGGED ANOMALIES"))
     assertEquals(true, lastAiMsg.citations.isNotEmpty())
   }
@@ -1030,7 +1100,626 @@ class ExampleRobolectricTest {
     assertEquals(com.example.data.model.BillingCycle.ANNUAL, details.billingCycle)
     assertEquals(true, details.autoRenew)
   }
+
+  @Test
+  fun `verify profile-scoped chat history and message isolation across profiles`() = runBlocking<Unit> {
+    val repository = com.example.data.repository.VitalithRepository(db)
+
+    // Initial chat history should contain seeded messages for Doug, Maya, and Kwame
+    val allMessages = repository.chatMessages.first()
+    val dougMessages = allMessages.filter { it.profileId == "profile_doug" }
+    val mayaMessages = allMessages.filter { it.profileId == "profile_maya" }
+    val kwameMessages = allMessages.filter { it.profileId == "profile_kwame" }
+
+    assertTrue(dougMessages.isNotEmpty())
+    assertTrue(mayaMessages.isNotEmpty())
+    assertTrue(kwameMessages.isNotEmpty())
+
+    // Sending a message while Doug is active scopes to profile_doug
+    repository.switchProfile("profile_doug")
+    repository.sendUserMessage("Tell me about my medications")
+    val messagesAfterDoug = repository.chatMessages.first()
+    val latestDougAi = messagesAfterDoug.filter { it.profileId == "profile_doug" && it.sender == "ai" }.last()
+    assertTrue(latestDougAi.text.contains("Metformin", ignoreCase = true))
+    assertEquals("profile_doug", latestDougAi.profileId)
+
+    // Switching to Maya scopes messages to profile_maya
+    repository.switchProfile("profile_maya")
+    repository.sendUserMessage("What are my active medications?")
+    val messagesAfterMaya = repository.chatMessages.first()
+    val latestMayaAi = messagesAfterMaya.filter { it.profileId == "profile_maya" && it.sender == "ai" }.last()
+    assertTrue(latestMayaAi.text.contains("Cetirizine", ignoreCase = true) || latestMayaAi.text.contains("EpiPen", ignoreCase = true))
+    assertEquals("profile_maya", latestMayaAi.profileId)
+
+    // Verify Maya's chat does not leak into Doug's filtered view
+    val finalDougChat = repository.chatMessages.first().filter { it.profileId == "profile_doug" }
+    assertFalse(finalDougChat.any { it.text.contains("Cetirizine") })
+  }
+
+  @Test
+  fun `verify dynamically grounded responses for labs medications and red flags per patient profile`() = runBlocking<Unit> {
+    val repository = com.example.data.repository.VitalithRepository(db)
+
+    // 1. Kwame renal & cardiology query
+    repository.switchProfile("profile_kwame")
+    repository.sendUserMessage("What is my latest eGFR and kidney function reading?")
+    val kwameResp = repository.chatMessages.first().last { it.profileId == "profile_kwame" && it.sender == "ai" }
+    assertTrue(kwameResp.text.contains("48 mL/min", ignoreCase = true) || kwameResp.text.contains("CKD Stage 3a", ignoreCase = true))
+    assertTrue(kwameResp.citations.isNotEmpty())
+    assertEquals("profile_kwame", kwameResp.profileId)
+
+    // 2. Maya pediatric immunization query
+    repository.switchProfile("profile_maya")
+    repository.sendUserMessage("Tell me about my vaccines and allergy")
+    val mayaResp = repository.chatMessages.first().last { it.profileId == "profile_maya" && it.sender == "ai" }
+    assertTrue(mayaResp.text.contains("Peanut", ignoreCase = true))
+    assertTrue(mayaResp.citations.isNotEmpty())
+    assertEquals("profile_maya", mayaResp.profileId)
+
+    // 3. Doug red-flag triage
+    repository.switchProfile("profile_doug")
+    repository.sendUserMessage("I am having severe chest pain and shortness of breath")
+    val redFlagResp = repository.chatMessages.first().last { it.profileId == "profile_doug" && it.sender == "ai" }
+    assertTrue(redFlagResp.isRedFlag)
+    assertNotNull(redFlagResp.redFlagEscalationText)
+    assertTrue(redFlagResp.redFlagEscalationText!!.contains("911", ignoreCase = true))
+  }
+
+  @Test
+  fun `verify dynamic appointment prep synthesis across active patient profiles`() = runBlocking<Unit> {
+    val repository = com.example.data.repository.VitalithRepository(db)
+
+    // Doug prep
+    repository.switchProfile("profile_doug")
+    val dougPrep = repository.getAppointmentPrep()
+    assertEquals("profile_doug", dougPrep.profileId)
+    assertTrue(dougPrep.doctorName.contains("Chen", ignoreCase = true))
+    assertTrue(dougPrep.criticalMetrics.containsKey("HbA1c"))
+    assertEquals(3, dougPrep.activeMedsCount)
+
+    // Maya prep
+    repository.switchProfile("profile_maya")
+    val mayaPrep = repository.getAppointmentPrep()
+    assertEquals("profile_maya", mayaPrep.profileId)
+    assertTrue(mayaPrep.clinic.contains("Pediatric", ignoreCase = true))
+    assertTrue(mayaPrep.criticalMetrics.containsKey("Blood Lead") || mayaPrep.criticalMetrics.containsKey("Height / Growth"))
+    assertEquals(2, mayaPrep.activeMedsCount)
+
+    // Kwame prep
+    repository.switchProfile("profile_kwame")
+    val kwamePrep = repository.getAppointmentPrep()
+    assertEquals("profile_kwame", kwamePrep.profileId)
+    assertTrue(kwamePrep.clinic.contains("Heart", ignoreCase = true) || kwamePrep.doctorName.contains("Rossi", ignoreCase = true))
+    assertTrue(kwamePrep.criticalMetrics.containsKey("eGFR"))
+    assertEquals(4, kwamePrep.activeMedsCount)
+  }
+
+  @Test
+  fun `verify TimelineItemEntity JSON serialization and legacy delimiter fallback`() {
+    // 1. JSON serialization from domain
+    val item = com.example.data.model.HealthTimelineItem(
+      id = "item_json_test",
+      profileId = "profile_doug",
+      category = com.example.data.model.TimelineCategory.LAB,
+      title = "Lipid Subfractions",
+      subtitle = "LabCorp",
+      date = "Oct 25, 2026",
+      providerOrFacility = "LabCorp",
+      status = com.example.data.model.ItemStatus.NORMAL,
+      clinicalNotes = "Subfractions within reference interval",
+      provenance = com.example.data.model.Provenance("LabCorp", "2026-10-25", 1.0f, "Full Consent"),
+      tags = listOf("Cardio", "Lipids", "VLDL"),
+      keyValues = mapOf("ApoB" to "78 mg/dL", "Lp(a)" to "15 nmol/L")
+    )
+    val entity = com.example.data.local.entities.TimelineItemEntity.fromDomain(item)
+    assertTrue(entity.tags.contains("Cardio") && entity.tags.contains("VLDL"))
+    assertTrue(entity.keyValuesRaw.contains("ApoB") && entity.keyValuesRaw.contains("78 mg"))
+
+    val restoredDomain = entity.toDomain()
+    assertEquals(listOf("Cardio", "Lipids", "VLDL"), restoredDomain.tags)
+    assertEquals("78 mg/dL", restoredDomain.keyValues["ApoB"])
+    assertEquals("15 nmol/L", restoredDomain.keyValues["Lp(a)"])
+
+    // 2. Legacy comma and pipe delimiter fallback
+    val legacyEntity = com.example.data.local.entities.TimelineItemEntity(
+      id = "item_legacy_test",
+      profileId = "profile_doug",
+      category = "LAB",
+      title = "Legacy Test",
+      subtitle = "Legacy Clinic",
+      date = "Sep 10, 2024",
+      providerOrFacility = "Legacy Clinic",
+      status = "NORMAL",
+      clinicalNotes = "Old format notes",
+      sourceSystem = "Legacy",
+      ingestedAt = "2024-09-10",
+      confidenceScore = 0.9f,
+      consentState = "Consent",
+      documentHash = "hash123",
+      tags = "LegacyTag1, LegacyTag2, LegacyTag3",
+      keyValuesRaw = "OldKey1:OldVal1|OldKey2:OldVal2"
+    )
+    val legacyDomain = legacyEntity.toDomain()
+    assertEquals(listOf("LegacyTag1", "LegacyTag2", "LegacyTag3"), legacyDomain.tags)
+    assertEquals("OldVal1", legacyDomain.keyValues["OldKey1"])
+    assertEquals("OldVal2", legacyDomain.keyValues["OldKey2"])
+  }
+
+  @Test
+  fun `verify CSV parser handles commas inside quoted fields without splitting columns`() {
+    val repository = com.example.data.repository.VitalithRepository(db)
+    val csvWithQuotedCommas = """
+      id,name,dosage,frequency,prescriber,indication,status
+      "rx_quoted_1","Metformin ER","500 mg, twice daily","Take with morning and evening meals","Dr. Sarah Jenkins, MD","Pre-diabetes, insulin resistance","ACTIVE"
+    """.trimIndent()
+
+    val (count, msg) = repository.importMedicationsCsv(csvWithQuotedCommas)
+    assertEquals(1, count)
+    assertTrue(msg.contains("1"))
+
+    val importedMed = repository.medications.value.first { it.id.startsWith("csv_med_") && it.name == "Metformin ER" }
+    assertEquals("500 mg, twice daily", importedMed.dosage)
+    assertEquals("Dr. Sarah Jenkins, MD", importedMed.prescriber)
+    assertEquals("Pre-diabetes, insulin resistance", importedMed.indication)
+  }
+
+  @Test
+  fun `verify dynamic audit actor reflects active user and patient profile context`() {
+    val repository = com.example.data.repository.VitalithRepository(db)
+
+    // 1. Primary patient (Doug)
+    repository.switchProfile("profile_doug")
+    repository.recordAudit("TEST_ACTION_DOUG", "Testing audit for Doug")
+    val dougAudit = repository.auditLogs.value.first()
+    assertEquals("Doug Adarkwah (Owner)", dougAudit.actor)
+
+    // 2. Switched patient (Maya)
+    repository.switchProfile("profile_maya")
+    repository.recordAudit("TEST_ACTION_MAYA", "Testing audit for Maya")
+    val mayaAudit = repository.auditLogs.value.first()
+    assertEquals("Doug Adarkwah (Acting for Maya Adarkwah)", mayaAudit.actor)
+
+    // 3. User profile name updated
+    val updatedUser = repository.userProfile.value.copy(fullName = "Kofi Mensah")
+    repository.updateUserProfile(updatedUser)
+    repository.recordAudit("TEST_ACTION_UPDATED_NAME", "Testing audit with renamed user")
+    val updatedAudit = repository.auditLogs.value.first()
+    assertEquals("Kofi Mensah (Acting for Maya Adarkwah)", updatedAudit.actor)
+
+    // 4. Reset back to Doug
+    repository.switchProfile("profile_doug")
+    repository.recordAudit("TEST_ACTION_RESET", "Testing audit after reset")
+    val resetAudit = repository.auditLogs.value.first()
+    assertEquals("Kofi Mensah (Owner)", resetAudit.actor)
+  }
+
+  @Test
+  fun `verify local persistence across repository restart with Room database`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository(db)
+
+    // Update preferences and profiles
+    repository.switchProfile("profile_maya")
+    val updatedMaya = repository.profiles.value.first { it.id == "profile_maya" }.copy(notes = "Updated pediatric allergy notes")
+    repository.updatePatientProfile(updatedMaya)
+
+    // Add a reminder and care grant
+    val testReminder = com.example.data.model.MedicationReminder(
+      id = "rem_persist_test",
+      profileId = "profile_maya",
+      medicationId = "med_maya_1",
+      medicationName = "Cetirizine Liquid",
+      dosage = "5 mL",
+      hour = 8,
+      minute = 30,
+      daysOfWeek = listOf(1, 2, 3, 4, 5),
+      isEnabled = true,
+      instructions = "Morning dose before school"
+    )
+    repository.addMedicationReminder(testReminder)
+
+    val grant = repository.createCareGrant("Oakridge Elementary School Nurse", "School Nurse", "Allergies & Immunizations", "180 days")
+
+    // Update user profile unit preference and subscription tier
+    repository.setGlucoseUnit(com.example.data.model.GlucoseUnit.MMOL_L)
+    repository.setSubscriptionTier(com.example.data.model.SubscriptionTier.PREMIUM_PLUS)
+
+    // Wait for Room async write
+    kotlinx.coroutines.delay(400)
+
+    // Re-instantiate repository pointing to same Room database
+    val restartedRepository = com.example.data.repository.VitalithRepository(db)
+    var attempts = 0
+    while (restartedRepository.currentProfileId.value != "profile_maya" && attempts < 20) {
+      kotlinx.coroutines.delay(100)
+      attempts++
+    }
+
+    // Verify preferences and state reloaded
+    assertEquals("profile_maya", restartedRepository.currentProfileId.value)
+    assertEquals(com.example.data.model.GlucoseUnit.MMOL_L, restartedRepository.userProfile.value.unitPreferences.glucoseUnit)
+    assertEquals(com.example.data.model.SubscriptionTier.PREMIUM_PLUS, restartedRepository.subscriptionTier.value)
+
+    val reloadedMaya = restartedRepository.profiles.first().first { it.id == "profile_maya" }
+    assertEquals("Updated pediatric allergy notes", reloadedMaya.notes)
+
+    val reloadedReminder = restartedRepository.reminders.first().firstOrNull { it.id == "rem_persist_test" }
+    assertNotNull(reloadedReminder)
+    assertEquals("Cetirizine Liquid", reloadedReminder?.medicationName)
+
+    val reloadedGrant = restartedRepository.careGrants.first().firstOrNull { it.id == grant.id }
+    assertNotNull(reloadedGrant)
+    assertEquals("Oakridge Elementary School Nurse", reloadedGrant?.recipientName)
+  }
+
+  @Test
+  fun `verify GoogleProviderSearchService generates accurate Google Search and Maps URLs`() {
+    val searchUrl = com.example.util.GoogleProviderSearchService.buildGoogleSearchUrl(
+      query = "pediatric allergy specialist",
+      location = "Seattle, WA"
+    )
+    assertTrue(searchUrl.startsWith("https://www.google.com/search?q="))
+    assertTrue(searchUrl.contains("pediatric"))
+    assertTrue(searchUrl.contains("Seattle"))
+
+    val mapsUrl = com.example.util.GoogleProviderSearchService.buildGoogleMapsUrl(
+      query = "Quest Diagnostics",
+      location = "Chicago, IL",
+      lat = 41.8781,
+      lng = -87.6298
+    )
+    assertTrue(mapsUrl.startsWith("https://www.google.com/maps/search/?api=1"))
+    assertTrue(mapsUrl.contains("center=41.8781,-87.6298"))
+  }
+
+  @Test
+  fun `verify GoogleProviderSearchService provides tailored suggestions per active patient profile`() {
+    val repository = com.example.data.repository.VitalithRepository(db)
+    val profiles = repository.profiles.value
+
+    val maya = profiles.first { it.id == "profile_maya" }
+    val mayaSuggestions = com.example.util.GoogleProviderSearchService.getPatientSuggestions(maya)
+    assertTrue(mayaSuggestions.isNotEmpty())
+    assertTrue(mayaSuggestions.any { it.specialty == com.example.data.model.HealthcareSpecialty.PEDIATRICS })
+    assertTrue(mayaSuggestions.any { it.specialty == com.example.data.model.HealthcareSpecialty.ALLERGY_IMMUNOLOGY })
+
+    val kwame = profiles.first { it.id == "profile_kwame" }
+    val kwameSuggestions = com.example.util.GoogleProviderSearchService.getPatientSuggestions(kwame)
+    assertTrue(kwameSuggestions.isNotEmpty())
+    assertTrue(kwameSuggestions.any { it.specialty == com.example.data.model.HealthcareSpecialty.CARDIOLOGY })
+    assertTrue(kwameSuggestions.any { it.reasonBadge.contains("Stent", ignoreCase = true) })
+
+    val doug = profiles.first { it.id == "profile_doug" }
+    val dougSuggestions = com.example.util.GoogleProviderSearchService.getPatientSuggestions(doug)
+    assertTrue(dougSuggestions.isNotEmpty())
+    assertTrue(dougSuggestions.any { it.specialty == com.example.data.model.HealthcareSpecialty.ENDOCRINOLOGY })
+  }
+
+  @Test
+  fun `verify GoogleProviderSearchService filters providers by specialty, query, and location`() {
+    val profile = com.example.data.model.PatientProfile(
+      id = "profile_test",
+      name = "Test Patient",
+      relationship = "Self",
+      dob = "1990-01-01",
+      bloodType = "O+",
+      mrn = "MRN-TEST-99"
+    )
+    val location = com.example.data.model.UserLocationInfo(
+      displayName = "Boston, MA",
+      city = "Boston",
+      state = "MA",
+      isGpsAccurate = true
+    )
+
+    // 1. Search all providers
+    val allProviders = com.example.util.GoogleProviderSearchService.searchProviders(
+      query = "",
+      specialty = com.example.data.model.HealthcareSpecialty.ALL,
+      location = location,
+      profile = profile
+    )
+    assertTrue(allProviders.size >= 5)
+
+    // 2. Filter by Cardiology
+    val cardiologists = com.example.util.GoogleProviderSearchService.searchProviders(
+      query = "",
+      specialty = com.example.data.model.HealthcareSpecialty.CARDIOLOGY,
+      location = location,
+      profile = profile
+    )
+    assertTrue(cardiologists.all { it.specialty.contains("Cardio", ignoreCase = true) })
+
+    // 3. Search by text keyword
+    val labResults = com.example.util.GoogleProviderSearchService.searchProviders(
+      query = "Quest",
+      specialty = com.example.data.model.HealthcareSpecialty.ALL,
+      location = location,
+      profile = profile
+    )
+    assertTrue(labResults.any { it.facilityName.contains("Quest", ignoreCase = true) })
+  }
+
+  @Test
+  fun `verify quick symptom logging on active profile persists to repository and triggers audit`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository(db)
+    val activeProfileId = repository.currentProfileId.value
+
+    val symptom = com.example.data.model.SymptomItem(
+      id = "sym_quick_01",
+      profileId = activeProfileId,
+      symptomName = "Acute Migraine with Aura",
+      severity = 7,
+      severityLabel = "Severe",
+      onsetDate = "Oct 31, 2026",
+      bodySite = "Forehead",
+      notes = "Logged via HomeScreen Quick-Log FAB",
+      contextTags = listOf("High Stress", "Poor Sleep (<6h)")
+    )
+
+    repository.addSymptom(symptom)
+
+    val profileSymptoms = repository.symptoms.value.filter { it.profileId == activeProfileId }
+    assertTrue(profileSymptoms.any { it.id == "sym_quick_01" && it.symptomName == "Acute Migraine with Aura" })
+    val saved = profileSymptoms.first { it.id == "sym_quick_01" }
+    assertEquals(7, saved.severity)
+    assertEquals("Severe", saved.severityLabel)
+    assertEquals("Forehead", saved.bodySite)
+
+    // Verify audit recorded
+    val auditLog = repository.auditLogs.value
+    assertTrue(auditLog.any { it.action == "LOG_SYMPTOM" && it.resource.contains("Acute Migraine with Aura") })
+  }
+
+  @Test
+  fun `verify quick medication logging on active profile persists to repository and triggers audit`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository(db)
+    val activeProfileId = repository.currentProfileId.value
+
+    val medication = com.example.data.model.MedicationItem(
+      id = "med_quick_01",
+      profileId = activeProfileId,
+      name = "Sumatriptan",
+      dosage = "50 mg",
+      frequency = "As needed at onset (PRN)",
+      prescriber = "Dr. Sarah Lin (PCP)",
+      startDate = "Oct 31, 2026",
+      status = com.example.data.model.ItemStatus.ACTIVE,
+      indication = "Acute migraine relief",
+      provenance = com.example.data.model.Provenance(
+        sourceSystem = "Patient Self-Report (HomeScreen Quick-Log FAB)",
+        ingestedAt = "Just now",
+        confidenceScore = 1.0f,
+        consentState = "Patient-Owned / Private Vault"
+      )
+    )
+
+    repository.addMedication(medication)
+
+    val profileMeds = repository.medications.value.filter { it.profileId == activeProfileId }
+    assertTrue(profileMeds.any { it.id == "med_quick_01" && it.name == "Sumatriptan" })
+    val savedMed = profileMeds.first { it.id == "med_quick_01" }
+    assertEquals("50 mg", savedMed.dosage)
+    assertEquals("Acute migraine relief", savedMed.indication)
+
+    // Verify audit recorded
+    val auditLog = repository.auditLogs.value
+    assertTrue(auditLog.any { it.action == "MEDICATION_ADDED" && it.resource.contains("Sumatriptan") })
+  }
+
+  @Test
+  fun `verify Google Fit wearable service generates authentic activity and heart rate data across patient profiles`() {
+    val service = com.example.data.wearable.GoogleFitWearableIntegrationService()
+
+    // Test Doug's profile
+    val dougActivity = service.getDailyActivityData("profile_doug")
+    val dougHeartRate = service.getHeartRateData("profile_doug")
+    assertEquals(8950, dougActivity.stepsCount)
+    assertEquals(10000, dougActivity.stepGoal)
+    assertEquals(52, dougActivity.activeMinutes)
+    assertEquals(62, dougHeartRate.restingHeartRateBpm)
+    assertTrue(dougHeartRate.samples.isNotEmpty())
+    assertEquals(24, dougHeartRate.samples.size)
+
+    // Test Maya's pediatric profile
+    val mayaActivity = service.getDailyActivityData("profile_maya")
+    val mayaHeartRate = service.getHeartRateData("profile_maya")
+    assertEquals(11420, mayaActivity.stepsCount)
+    assertEquals(74, mayaHeartRate.restingHeartRateBpm)
+    assertTrue(mayaActivity.stepsCount > dougActivity.stepsCount)
+
+    // Test Kwame's elderly cardiac profile
+    val kwameActivity = service.getDailyActivityData("profile_kwame")
+    val kwameHeartRate = service.getHeartRateData("profile_kwame")
+    assertEquals(5480, kwameActivity.stepsCount)
+    assertEquals(68, kwameHeartRate.restingHeartRateBpm)
+
+    // Check hourly step distribution sums to total steps
+    val totalHourlySteps = dougActivity.hourlySteps.sumOf { it.steps }
+    assertEquals(dougActivity.stepsCount, totalHourlySteps)
+  }
+
+  @Test
+  fun `verify Google Fit connection, pairing, and wearable device toggle in repository`() {
+    val repository = com.example.data.repository.VitalithRepository()
+
+    // Initially authenticated
+    assertEquals(com.example.data.model.GoogleFitConnectionState.AUTHENTICATED_CONNECTED, repository.googleFitState.value)
+    assertTrue(repository.wearableDevices.value.isNotEmpty())
+
+    val initialCount = repository.wearableDevices.value.size
+    val firstDevice = repository.wearableDevices.value.first()
+
+    // Toggle connection state of first device
+    val initialConnected = firstDevice.isConnected
+    repository.toggleWearableDeviceConnection(firstDevice.id)
+    val toggledDevice = repository.wearableDevices.value.first { it.id == firstDevice.id }
+    assertEquals(!initialConnected, toggledDevice.isConnected)
+
+    // Pair a new device
+    val newDevice = com.example.data.model.WearableDevice(
+      id = "device_test_whoop",
+      name = "Whoop 4.0 Biometric Band",
+      type = com.example.data.model.WearableDeviceType.WEAR_OS_GENERIC,
+      manufacturer = "Whoop",
+      model = "W4-GEN",
+      batteryPercent = 91,
+      isConnected = true,
+      lastSyncedTimestamp = System.currentTimeMillis(),
+      deviceIdentifier = "WP:99:11:AA:BB"
+    )
+    repository.pairNewWearableDevice(newDevice)
+    assertEquals(initialCount + 1, repository.wearableDevices.value.size)
+    assertTrue(repository.wearableDevices.value.any { it.id == "device_test_whoop" })
+
+    // Disconnect Google Fit
+    repository.disconnectGoogleFit()
+    assertEquals(com.example.data.model.GoogleFitConnectionState.DISCONNECTED, repository.googleFitState.value)
+    assertTrue(repository.wearableDevices.value.filter { it.platform == com.example.data.model.WearablePlatform.GOOGLE_FIT }.none { it.isConnected })
+
+    // Reconnect Google Fit
+    repository.connectGoogleFit("abydouglas@gmail.com")
+    assertEquals(com.example.data.model.GoogleFitConnectionState.AUTHENTICATED_CONNECTED, repository.googleFitState.value)
+  }
+
+  @Test
+  fun `verify syncing and ingesting wearable telemetry creates clinical observations with LOINC codes and audit entry`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository()
+    val initialTimelineCount = repository.timelineItems.value.size
+
+    // Perform sync
+    val syncResult = repository.syncWearableData("profile_doug")
+    assertTrue(syncResult.isSuccess)
+    assertTrue(syncResult.stepsImported > 0)
+    assertTrue(syncResult.restingHr > 0)
+    assertTrue(syncResult.sha256Checksum.isNotBlank())
+
+    // Ingest into clinical timeline
+    val items = repository.importWearableToTimeline("profile_doug")
+    assertTrue(items.size >= 2)
+    assertEquals(initialTimelineCount + items.size, repository.timelineItems.value.size)
+
+    // Verify Step Count item conforms to LOINC 55423-8
+    val stepItem = items.first { it.tags.contains("LOINC 55423-8") }
+    assertTrue(stepItem.title.contains("Daily Activity:"))
+    assertTrue(stepItem.keyValues.containsKey("Steps"))
+    assertTrue(stepItem.keyValues.containsKey("Calories Burned"))
+
+    // Verify Heart Rate item conforms to LOINC 8867-4
+    val hrItem = items.first { it.tags.contains("LOINC 8867-4") }
+    assertTrue(hrItem.title.contains("Resting Heart Rate:"))
+    assertTrue(hrItem.keyValues.containsKey("Resting HR"))
+    assertTrue(hrItem.keyValues.containsKey("Heart Rate Variability (HRV)"))
+    assertEquals(com.example.data.model.TimelineCategory.LAB, hrItem.category)
+
+    // Verify cryptographic provenance hash is present
+    assertTrue(hrItem.provenance.documentHash.startsWith("sha256:"))
+
+    // Verify audit log entry
+    val auditLogs = repository.auditLogs.value
+    assertTrue(auditLogs.any { it.action == "WEARABLE_DATA_INGEST" || it.action == "ZEPP_DATA_INGEST" })
+  }
+
+  @Test
+  fun `verify Zepp Health account connection, Amazfit device pairing and disconnect flow`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository()
+
+    // Verify Zepp initial state
+    assertEquals(com.example.data.model.ZeppConnectionState.AUTHENTICATED_CONNECTED, repository.zeppState.value)
+    assertEquals("abydouglas@zepp.life", repository.zeppAccountEmail.value)
+
+    // Verify default Amazfit devices are registered
+    val amazfitDevices = repository.wearableDevices.value.filter { it.platform == com.example.data.model.WearablePlatform.ZEPP_HEALTH }
+    assertTrue(amazfitDevices.isNotEmpty())
+    assertTrue(amazfitDevices.any { it.name.contains("Amazfit Balance") })
+    assertTrue(amazfitDevices.any { it.name.contains("Amazfit T-Rex") })
+
+    // Pair a new Amazfit device (e.g. Amazfit Falcon)
+    val newAmazfit = com.example.data.model.WearableDevice(
+      id = "device_amazfit_falcon_test",
+      name = "Amazfit Falcon",
+      type = com.example.data.model.WearableDeviceType.AMAZFIT_TREX,
+      manufacturer = "Zepp Health",
+      model = "A2029",
+      batteryPercent = 95,
+      isConnected = true,
+      lastSyncedTimestamp = System.currentTimeMillis(),
+      deviceIdentifier = "AF:FC:99:11:22",
+      platform = com.example.data.model.WearablePlatform.ZEPP_HEALTH,
+      sensorInfo = "BioTracker™ 3.0 PPG Titanium"
+    )
+    repository.pairNewWearableDevice(newAmazfit)
+    assertTrue(repository.wearableDevices.value.any { it.id == "device_amazfit_falcon_test" })
+
+    // Disconnect Zepp
+    repository.disconnectZepp()
+    assertEquals(com.example.data.model.ZeppConnectionState.DISCONNECTED, repository.zeppState.value)
+    assertTrue(repository.wearableDevices.value.filter { it.platform == com.example.data.model.WearablePlatform.ZEPP_HEALTH }.none { it.isConnected })
+
+    // Reconnect Zepp
+    repository.connectZepp("douglas.amazfit@zepp.com")
+    assertEquals(com.example.data.model.ZeppConnectionState.AUTHENTICATED_CONNECTED, repository.zeppState.value)
+    assertEquals("douglas.amazfit@zepp.com", repository.zeppAccountEmail.value)
+
+    val auditLogs = repository.auditLogs.value
+    assertTrue(auditLogs.any { it.action == "ZEPP_AUTH_CONNECT" })
+    assertTrue(auditLogs.any { it.action == "ZEPP_AUTH_REVOKED" })
+  }
+
+  @Test
+  fun `verify syncing and ingesting Zepp Amazfit telemetry generates PAI score, BioTracker PPG and LOINC clinical observations`() = runBlocking {
+    val repository = com.example.data.repository.VitalithRepository()
+    val initialTimelineCount = repository.timelineItems.value.size
+
+    // Sync Amazfit device
+    val syncResult = repository.syncZeppWearableData("profile_doug")
+    assertTrue(syncResult.isSuccess)
+    assertEquals(com.example.data.model.WearablePlatform.ZEPP_HEALTH, syncResult.platform)
+    assertTrue(syncResult.stepsImported > 0)
+    assertTrue(syncResult.restingHr > 0)
+    assertNotNull(syncResult.paiImported)
+    assertTrue(syncResult.paiImported!! >= 100)
+    assertTrue(syncResult.sha256Checksum.isNotBlank())
+
+    // Ingest into timeline
+    val items = repository.importZeppWearableToTimeline("profile_doug")
+    assertEquals(3, items.size)
+    assertEquals(initialTimelineCount + 3, repository.timelineItems.value.size)
+
+    // Verify 1: Daily Activity (LOINC 55423-8)
+    val actItem = items.first { it.tags.contains("LOINC 55423-8") }
+    assertTrue(actItem.tags.contains("Zepp Health"))
+    assertTrue(actItem.tags.contains("Amazfit"))
+    assertTrue(actItem.keyValues.containsKey("Steps"))
+    assertTrue(actItem.keyValues.containsKey("Device Platform"))
+    assertEquals("Zepp OS", actItem.keyValues["Device Platform"])
+
+    // Verify 2: BioTracker PPG Heart Rate (LOINC 8867-4)
+    val hrItem = items.first { it.tags.contains("LOINC 8867-4") }
+    assertTrue(hrItem.tags.contains("BioTracker PPG"))
+    assertTrue(hrItem.keyValues.containsKey("Resting HR"))
+    assertTrue(hrItem.keyValues.containsKey("SpO2 Blood Oxygen"))
+    assertEquals(com.example.data.model.TimelineCategory.LAB, hrItem.category)
+
+    // Verify 3: Personal Activity Intelligence (PAI) & Readiness (LOINC 80490-6)
+    val paiItem = items.first { it.tags.contains("LOINC 80490-6") }
+    assertEquals(com.example.data.model.TimelineCategory.DOCUMENT, paiItem.category)
+    assertTrue(paiItem.title.contains("PAI Score: 112"))
+    assertTrue(paiItem.subtitle.contains("Readiness: 89/100"))
+    assertTrue(paiItem.keyValues.containsKey("PAI Score"))
+    assertTrue(paiItem.keyValues.containsKey("Target Baseline"))
+    assertTrue(paiItem.keyValues.containsKey("Algorithm Standard"))
+    assertEquals("HUNT Fitness Study Validated", paiItem.keyValues["Algorithm Standard"])
+    assertTrue(paiItem.clinicalNotes.contains("HUNT Fitness Study"))
+
+    // Verify Audit Trail
+    val auditLogs = repository.auditLogs.value
+    assertTrue(auditLogs.any { it.action == "ZEPP_TELEMETRY_SYNC" })
+    assertTrue(auditLogs.any { it.action == "ZEPP_DATA_INGEST" })
+  }
 }
+
+
+
 
 
 

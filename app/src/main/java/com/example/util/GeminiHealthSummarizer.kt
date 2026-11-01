@@ -216,7 +216,7 @@ object GeminiHealthSummarizer {
       flaggedFindings = findingsList,
       suggestedQuestions = if (questionsList.isNotEmpty()) questionsList else listOf("How often should we repeat the metabolic panel?"),
       overallStatusLabel = overallStatus,
-      modelUsed = MODEL_NAME,
+      modelUsed = "Vitalith AI ($MODEL_NAME)",
       generatedAt = timestamp
     )
   }
@@ -340,7 +340,7 @@ object GeminiHealthSummarizer {
       flaggedFindings = findings,
       suggestedQuestions = questions,
       overallStatusLabel = "Clinically Stable • Glycemic Trajectory Improving",
-      modelUsed = "$MODEL_NAME (Grounded Clinical Synthesis)",
+      modelUsed = "Vitalith AI (Grounded Clinical Synthesis)",
       generatedAt = timestamp
     )
   }

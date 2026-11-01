@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -246,6 +247,15 @@ fun SubscriptionScreen(
                   ) {
                     Text("Turn Off", fontSize = 11.5.sp, color = VitalAlertRed, fontWeight = FontWeight.Bold)
                   }
+                } else {
+                  Button(
+                    onClick = { repository.resumeSubscriptionAutoRenew() },
+                    colors = ButtonDefaults.buttonColors(containerColor = VitalEmeraldSuccess),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.testTag("subscription_resume_autorenew_button")
+                  ) {
+                    Text("Resume Auto-Renew", fontSize = 11.5.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                  }
                 }
               }
             }
@@ -432,14 +442,14 @@ fun SubscriptionScreen(
               SubscriptionTier.FREE -> listOf(
                 "1 Primary Patient Profile",
                 "Encrypted On-Device Room SQLite Vault",
-                "5 Gemini Clinical Intelligence Queries / day",
+                "5 Vitalith Clinical Intelligence Queries / day",
                 "2 Document OCR Extractions / month",
                 "Emergency Medical ID lock screen snapshot",
                 "Standard PDF & CSV Data Export"
               )
               SubscriptionTier.PREMIUM -> listOf(
                 "Up to 5 Family Patient Profiles (Kids, Spouse, Elderly)",
-                "Unlimited Gemini 3.5 Flash Clinical Consultations",
+                "Unlimited Vitalith AI Clinical Consultations",
                 "Unlimited Multimodal OCR Document Auto-Fill",
                 "SMART on FHIR Automated Health Portal Sync",
                 "All 9 High-Contrast & M3 Clinical Theme Palettes",
@@ -448,7 +458,7 @@ fun SubscriptionScreen(
               )
               SubscriptionTier.PREMIUM_PLUS -> listOf(
                 "Unlimited Family & Dependent Patient Profiles",
-                "Priority Gemini 3.5 Flash Multimodal OCR Queue",
+                "Priority Vitalith AI Multimodal OCR Queue",
                 "Unlimited Cryptographic Care-Team Link Grants",
                 "Complete Cryptographic Provenance Audit Trail (Merkle)",
                 "Automated Drug-Drug Interaction Telemetry",
@@ -551,7 +561,7 @@ fun SubscriptionScreen(
 
             val entitlements = listOf(
               Triple("Family Patient Profiles", "1 (Self)", "Up to 5 • Unlimited on Plus+"),
-              Triple("Gemini Clinical Ingestion", "5 / day", "Unlimited High-Speed"),
+              Triple("Vitalith Clinical Ingestion", "5 / day", "Unlimited High-Speed"),
               Triple("Automated OCR Auto-Fill", "2 / month", "Unlimited Full Panels"),
               Triple("SMART on FHIR System Sync", "Manual Only", "Automated Real-Time Sync"),
               Triple("Care-Team Provider Links", "1 Active Link", "5 to Unlimited Links")
@@ -618,31 +628,29 @@ fun SubscriptionScreen(
                       .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                   ) {
-                    // Row 1: Plan Tier & Amount + Status Badge
-                    Row(
-                      modifier = Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.SpaceBetween,
-                      verticalAlignment = Alignment.CenterVertically
-                    ) {
-                      Text(
-                        text = "${txn.tier.displayName} (${txn.billingCycle.label})",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                      )
-                      Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                      ) {
+                    // Row 1: Plan Tier & Amount + Status Badge (shifts COMPLETED to next line if space is limited)
+                    ResponsivePaymentStatusRow(
+                      tierContent = {
+                        Text(
+                          text = "${txn.tier.displayName} (${txn.billingCycle.label})",
+                          fontSize = 13.sp,
+                          fontWeight = FontWeight.Bold,
+                          color = MaterialTheme.colorScheme.onSurface
+                        )
+                      },
+                      amountContent = {
                         Text(
                           text = "$${String.format(Locale.US, "%.2f", txn.amountPaid)}",
                           fontSize = 14.sp,
                           fontWeight = FontWeight.ExtraBold,
                           color = MaterialTheme.colorScheme.onSurface
                         )
+                      },
+                      badgeContent = {
                         Surface(
                           shape = RoundedCornerShape(4.dp),
-                          color = VitalEmeraldContainer
+                          color = VitalEmeraldContainer,
+                          modifier = Modifier.testTag("payment_status_badge_${txn.id}")
                         ) {
                           Text(
                             text = txn.status,
@@ -652,8 +660,10 @@ fun SubscriptionScreen(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                           )
                         }
-                      }
-                    }
+                      },
+                      horizontalSpacing = 6.dp,
+                      verticalSpacing = 2.dp
+                    )
 
                     // Row 2: Date & Invoice ID
                     Row(
@@ -1131,3 +1141,77 @@ private fun SubscriptionCheckoutDialog(
     }
   )
 }
+
+/**
+ * Responsive row for Payment & Billing history that places the Plan Tier, Amount, and
+ * Status Badge ("COMPLETED") side-by-side if there is sufficient horizontal space;
+ * otherwise, gracefully shifts "COMPLETED" to the next line with a very small line gap (2.dp).
+ */
+@Composable
+private fun ResponsivePaymentStatusRow(
+  tierContent: @Composable () -> Unit,
+  amountContent: @Composable () -> Unit,
+  badgeContent: @Composable () -> Unit,
+  modifier: Modifier = Modifier,
+  horizontalSpacing: androidx.compose.ui.unit.Dp = 6.dp,
+  verticalSpacing: androidx.compose.ui.unit.Dp = 2.dp
+) {
+  Layout(
+    content = {
+      Box(modifier = Modifier.wrapContentSize()) { tierContent() }
+      Box(modifier = Modifier.wrapContentSize()) { amountContent() }
+      Box(modifier = Modifier.wrapContentSize()) { badgeContent() }
+    },
+    modifier = modifier.fillMaxWidth()
+  ) { measurables, constraints ->
+    val horizontalSpacingPx = horizontalSpacing.roundToPx()
+    val verticalSpacingPx = verticalSpacing.roundToPx()
+    val minSpacingPx = 8.dp.roundToPx()
+    val maxAvailableWidth = constraints.maxWidth
+
+    val badgeMeasurable = measurables[2]
+    val badgePlaceable = badgeMeasurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+    val badgeWidth = badgePlaceable.width
+
+    val amountMeasurable = measurables[1]
+    val amountPlaceable = amountMeasurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+    val amountWidth = amountPlaceable.width
+
+    val tierMeasurable = measurables[0]
+    val tierIntrinsicWidth = tierMeasurable.maxIntrinsicWidth(constraints.maxHeight)
+
+    // Check if Tier + Amount + Badge can all fit side-by-side on a single line
+    val canFitAllTogether = (tierIntrinsicWidth + minSpacingPx + amountWidth + horizontalSpacingPx + badgeWidth) <= maxAvailableWidth
+
+    if (canFitAllTogether) {
+      val maxTierWidth = (maxAvailableWidth - amountWidth - horizontalSpacingPx - badgeWidth - minSpacingPx).coerceAtLeast(0)
+      val tierPlaceable = tierMeasurable.measure(
+        constraints.copy(minWidth = 0, maxWidth = maxTierWidth)
+      )
+      val rowHeight = maxOf(tierPlaceable.height, amountPlaceable.height, badgePlaceable.height)
+      layout(maxAvailableWidth, rowHeight) {
+        tierPlaceable.placeRelative(0, (rowHeight - tierPlaceable.height) / 2)
+        val amountX = maxAvailableWidth - badgeWidth - horizontalSpacingPx - amountWidth
+        amountPlaceable.placeRelative(amountX, (rowHeight - amountPlaceable.height) / 2)
+        badgePlaceable.placeRelative(maxAvailableWidth - badgeWidth, (rowHeight - badgePlaceable.height) / 2)
+      }
+    } else {
+      // Shift "COMPLETED" to the next line with a very small line gap (2.dp)
+      val maxTierWidth = (maxAvailableWidth - amountWidth - minSpacingPx).coerceAtLeast(0)
+      val tierPlaceable = tierMeasurable.measure(
+        constraints.copy(minWidth = 0, maxWidth = maxTierWidth)
+      )
+      val line1Height = maxOf(tierPlaceable.height, amountPlaceable.height)
+      val totalHeight = line1Height + verticalSpacingPx + badgePlaceable.height
+
+      layout(maxAvailableWidth, totalHeight) {
+        // Line 1: Tier on left, Amount on right
+        tierPlaceable.placeRelative(0, (line1Height - tierPlaceable.height) / 2)
+        amountPlaceable.placeRelative(maxAvailableWidth - amountWidth, (line1Height - amountPlaceable.height) / 2)
+        // Line 2: "COMPLETED" badge shifted to next line with small line gap
+        badgePlaceable.placeRelative(maxAvailableWidth - badgeWidth, line1Height + verticalSpacingPx)
+      }
+    }
+  }
+}
+

@@ -30,6 +30,7 @@ import com.example.data.model.TimelineCategory
 import com.example.data.repository.VitalithRepository
 import com.example.ui.components.GeminiHealthSummaryCard
 import com.example.ui.components.MedicalTermExplainerModal
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.components.ProvenanceBadge
 import com.example.ui.components.TimelineSpineItem
 import com.example.ui.theme.*
@@ -57,8 +58,12 @@ fun TimelineScreen(
   var selectedItemForDetail by remember { mutableStateOf<HealthTimelineItem?>(null) }
   var selectedTermForAiExplainer by remember { mutableStateOf<Pair<String, String>?>(null) }
 
-  val filteredItems = remember(timelineItems, selectedCategory, searchQuery) {
-    timelineItems.filter { item ->
+  val profileTimelineItems = remember(timelineItems, currentProfileId) {
+    timelineItems.filter { it.profileId == currentProfileId }
+  }
+
+  val filteredItems = remember(profileTimelineItems, selectedCategory, searchQuery) {
+    profileTimelineItems.filter { item ->
       val matchesCategory = (selectedCategory == TimelineCategory.ALL || item.category == selectedCategory)
       val matchesSearch = searchQuery.isBlank() ||
         item.title.contains(searchQuery, ignoreCase = true) ||
@@ -131,9 +136,31 @@ fun TimelineScreen(
             }
           }
 
-        Spacer(modifier = Modifier.height(12.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
-        // Search Bar
+          // Active Patient Profile Selector Dropdown
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Text(
+              text = "Patient Record:",
+              fontSize = 12.sp,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            PatientProfileDropdownSelector(
+              profiles = profiles,
+              currentProfileId = currentProfileId,
+              onSwitchProfile = { repository.switchProfile(it) },
+              modifier = Modifier.testTag("timeline_patient_dropdown")
+            )
+          }
+
+          Spacer(modifier = Modifier.height(10.dp))
+
+          // Search Bar
         OutlinedTextField(
           value = searchQuery,
           onValueChange = { searchQuery = it },
@@ -168,8 +195,10 @@ fun TimelineScreen(
             TimelineCategory.MEDICATION,
             TimelineCategory.ENCOUNTER,
             TimelineCategory.CONDITION,
+            TimelineCategory.PROCEDURE,
             TimelineCategory.ALLERGY,
-            TimelineCategory.IMMUNIZATION
+            TimelineCategory.IMMUNIZATION,
+            TimelineCategory.DOCUMENT
           )
           items(categories) { cat ->
             FilterChip(
@@ -177,7 +206,7 @@ fun TimelineScreen(
               onClick = { selectedCategory = cat },
               label = {
                 Text(
-                  text = if (cat == TimelineCategory.ALL) "All (${timelineItems.size})" else cat.name,
+                  text = if (cat == TimelineCategory.ALL) "All (${profileTimelineItems.size})" else cat.name,
                   fontSize = 11.sp,
                   fontWeight = if (selectedCategory == cat) FontWeight.Bold else FontWeight.Normal
                 )
@@ -364,7 +393,7 @@ fun TimelineScreen(
                   modifier = Modifier.size(16.dp)
                 )
                 Text(
-                  text = "Medical Terms (Tap for Gemini AI Explanation)",
+                  text = "Medical Terms (Tap for Vitalith AI Explanation)",
                   fontSize = 12.sp,
                   fontWeight = FontWeight.Bold,
                   color = VitalOnTealContainer

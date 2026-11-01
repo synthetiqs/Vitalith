@@ -58,69 +58,136 @@ data class TrendDataPoint(
 @Composable
 fun MonthlyHealthTrendsDashboard(
   modifier: Modifier = Modifier,
+  profileId: String = "profile_doug",
   unitPreferences: UnitPreferences = UnitPreferences(),
   onLogReadingClick: (() -> Unit)? = null
 ) {
   var selectedMetric by remember { mutableStateOf(MetricTrendType.BLOOD_PRESSURE) }
   var selectedPointIndex by remember { mutableStateOf<Int?>(null) }
 
-  // 30-day realistic historical data sets over the past month
-  val bpPoints = remember {
-    listOf(
-      TrendDataPoint("Sep 24", "Sep 24, 2026", 126f, 82f, "Slightly elevated post-travel"),
-      TrendDataPoint("Sep 27", "Sep 27, 2026", 124f, 80f, "Routine morning check"),
-      TrendDataPoint("Sep 30", "Sep 30, 2026", 122f, 79f, "Post aerobic walk"),
-      TrendDataPoint("Oct 03", "Oct 03, 2026", 121f, 78f, "Normal reading"),
-      TrendDataPoint("Oct 06", "Oct 06, 2026", 119f, 77f, "Resting morning"),
-      TrendDataPoint("Oct 09", "Oct 09, 2026", 122f, 79f, "Clinic verification"),
-      TrendDataPoint("Oct 12", "Oct 12, 2026", 118f, 76f, "Optimal morning state"),
-      TrendDataPoint("Oct 15", "Oct 15, 2026", 119f, 76f, "Post-hydration check"),
-      TrendDataPoint("Oct 18", "Oct 18, 2026", 117f, 75f, "Optimal baseline"),
-      TrendDataPoint("Oct 21", "Oct 21, 2026", 118f, 76f, "Resting seated check"),
-      TrendDataPoint("Oct 23", "Oct 23, 2026", 116f, 74f, "Current reading")
-    )
+  // 30-day realistic historical data sets over the past month, customized per patient profile
+  val bpPoints = remember(profileId) {
+    when (profileId) {
+      "profile_maya" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 96f, 60f, "Pediatric baseline check"),
+        TrendDataPoint("Sep 28", "Sep 28, 2026", 98f, 62f, "Calm seated reading"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 95f, 58f, "Normal pediatric percentile"),
+        TrendDataPoint("Oct 08", "Oct 08, 2026", 97f, 61f, "School nurse checkup"),
+        TrendDataPoint("Oct 14", "Oct 14, 2026", 96f, 60f, "Annual well-child clinic"),
+        TrendDataPoint("Oct 19", "Oct 19, 2026", 94f, 59f, "Resting morning baseline"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 95f, 60f, "Optimal pediatric BP")
+      )
+      "profile_kwame" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 138f, 86f, "Post-rehab walking check"),
+        TrendDataPoint("Sep 28", "Sep 28, 2026", 134f, 84f, "Carvedilol morning dose"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 132f, 82f, "Home Omron monitor check"),
+        TrendDataPoint("Oct 08", "Oct 08, 2026", 130f, 80f, "Cardiology target range"),
+        TrendDataPoint("Oct 14", "Oct 14, 2026", 128f, 80f, "Clinic verification (Dr. Rossi)"),
+        TrendDataPoint("Oct 19", "Oct 19, 2026", 126f, 78f, "Stable post-stent cardiac BP"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 126f, 78f, "Controlled resting BP")
+      )
+      else -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 126f, 82f, "Slightly elevated post-travel"),
+        TrendDataPoint("Sep 27", "Sep 27, 2026", 124f, 80f, "Routine morning check"),
+        TrendDataPoint("Sep 30", "Sep 30, 2026", 122f, 79f, "Post aerobic walk"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 121f, 78f, "Normal reading"),
+        TrendDataPoint("Oct 06", "Oct 06, 2026", 119f, 77f, "Resting morning"),
+        TrendDataPoint("Oct 09", "Oct 09, 2026", 122f, 79f, "Clinic verification"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 118f, 76f, "Optimal morning state"),
+        TrendDataPoint("Oct 15", "Oct 15, 2026", 119f, 76f, "Post-hydration check"),
+        TrendDataPoint("Oct 18", "Oct 18, 2026", 117f, 75f, "Optimal baseline"),
+        TrendDataPoint("Oct 21", "Oct 21, 2026", 118f, 76f, "Resting seated check"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 116f, 74f, "Current reading")
+      )
+    }
   }
 
-  val weightPoints = remember {
-    listOf(
-      TrendDataPoint("Sep 24", "Sep 24, 2026", 80.0f, null, "Baseline start of month"),
-      TrendDataPoint("Sep 27", "Sep 27, 2026", 79.8f, null, "Post-workout check"),
-      TrendDataPoint("Sep 30", "Sep 30, 2026", 79.5f, null, "Dietary adherence day 7"),
-      TrendDataPoint("Oct 03", "Oct 03, 2026", 79.3f, null, "Weekly check-in"),
-      TrendDataPoint("Oct 06", "Oct 06, 2026", 79.1f, null, "Stable morning weight"),
-      TrendDataPoint("Oct 09", "Oct 09, 2026", 78.9f, null, "Mid-month milestone"),
-      TrendDataPoint("Oct 12", "Oct 12, 2026", 78.7f, null, "Clean nutrition trend"),
-      TrendDataPoint("Oct 15", "Oct 15, 2026", 78.5f, null, "Consistently trending down"),
-      TrendDataPoint("Oct 18", "Oct 18, 2026", 78.4f, null, "Post cardio weigh-in"),
-      TrendDataPoint("Oct 21", "Oct 21, 2026", 78.3f, null, "Target zone approach"),
-      TrendDataPoint("Oct 23", "Oct 23, 2026", 78.2f, null, "Current morning weight")
-    )
+  val weightPoints = remember(profileId) {
+    when (profileId) {
+      "profile_maya" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 23.1f, null, "7-year growth baseline"),
+        TrendDataPoint("Sep 29", "Sep 29, 2026", 23.2f, null, "Healthy pediatric weight"),
+        TrendDataPoint("Oct 05", "Oct 05, 2026", 23.3f, null, "Normal growth trajectory"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 23.4f, null, "Pediatric wellness visit"),
+        TrendDataPoint("Oct 18", "Oct 18, 2026", 23.4f, null, "Stable 65th percentile"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 23.5f, null, "Current pediatric weight")
+      )
+      "profile_kwame" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 74.5f, null, "Baseline post-op weight"),
+        TrendDataPoint("Sep 29", "Sep 29, 2026", 74.3f, null, "Fluid balance stable"),
+        TrendDataPoint("Oct 05", "Oct 05, 2026", 74.2f, null, "Cardiac diet adherence"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 74.0f, null, "No peripheral edema"),
+        TrendDataPoint("Oct 18", "Oct 18, 2026", 73.9f, null, "Target dry weight maintained"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 73.8f, null, "Optimal cardiac target weight")
+      )
+      else -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 80.0f, null, "Baseline start of month"),
+        TrendDataPoint("Sep 27", "Sep 27, 2026", 79.8f, null, "Post-workout check"),
+        TrendDataPoint("Sep 30", "Sep 30, 2026", 79.5f, null, "Dietary adherence day 7"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 79.3f, null, "Weekly check-in"),
+        TrendDataPoint("Oct 06", "Oct 06, 2026", 79.1f, null, "Stable morning weight"),
+        TrendDataPoint("Oct 09", "Oct 09, 2026", 78.9f, null, "Mid-month milestone"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 78.7f, null, "Clean nutrition trend"),
+        TrendDataPoint("Oct 15", "Oct 15, 2026", 78.5f, null, "Consistently trending down"),
+        TrendDataPoint("Oct 18", "Oct 18, 2026", 78.4f, null, "Post cardio weigh-in"),
+        TrendDataPoint("Oct 21", "Oct 21, 2026", 78.3f, null, "Target zone approach"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 78.2f, null, "Current morning weight")
+      )
+    }
   }
 
-  val glucosePoints = remember {
-    listOf(
-      TrendDataPoint("Sep 24", "Sep 24, 2026", 5.7f, null, "Fasting 10 hours"),
-      TrendDataPoint("Sep 28", "Sep 28, 2026", 5.5f, null, "Fasting 12 hours"),
-      TrendDataPoint("Oct 02", "Oct 02, 2026", 5.3f, null, "Normal fasting glucose"),
-      TrendDataPoint("Oct 06", "Oct 06, 2026", 5.2f, null, "Optimal morning reading"),
-      TrendDataPoint("Oct 10", "Oct 10, 2026", 5.3f, null, "Post-walk morning check"),
-      TrendDataPoint("Oct 14", "Oct 14, 2026", 5.1f, null, "Lab confirmed fasting"),
-      TrendDataPoint("Oct 18", "Oct 18, 2026", 5.1f, null, "Consistent glycemic control"),
-      TrendDataPoint("Oct 23", "Oct 23, 2026", 5.0f, null, "Optimal fasting state")
-    )
+  val glucosePoints = remember(profileId) {
+    when (profileId) {
+      "profile_maya" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 4.8f, null, "Pediatric fasting glucose"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 4.7f, null, "Healthy glycemic state"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 4.6f, null, "Annual checkup verification"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 4.6f, null, "Normal pediatric fasting")
+      )
+      "profile_kwame" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 6.2f, null, "Post-prandial monitoring"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 5.9f, null, "Fasting 10 hours"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 5.8f, null, "Diet-controlled baseline"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 5.7f, null, "Stable metabolic control")
+      )
+      else -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 5.7f, null, "Fasting 10 hours"),
+        TrendDataPoint("Sep 28", "Sep 28, 2026", 5.5f, null, "Fasting 12 hours"),
+        TrendDataPoint("Oct 02", "Oct 02, 2026", 5.3f, null, "Normal fasting glucose"),
+        TrendDataPoint("Oct 06", "Oct 06, 2026", 5.2f, null, "Optimal morning reading"),
+        TrendDataPoint("Oct 10", "Oct 10, 2026", 5.3f, null, "Post-walk morning check"),
+        TrendDataPoint("Oct 14", "Oct 14, 2026", 5.1f, null, "Lab confirmed fasting"),
+        TrendDataPoint("Oct 18", "Oct 18, 2026", 5.1f, null, "Consistent glycemic control"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 5.0f, null, "Optimal fasting state")
+      )
+    }
   }
 
-  val heartRatePoints = remember {
-    listOf(
-      TrendDataPoint("Sep 24", "Sep 24, 2026", 68f, null, "Resting baseline"),
-      TrendDataPoint("Sep 28", "Sep 28, 2026", 66f, null, "Post sleep check"),
-      TrendDataPoint("Oct 02", "Oct 02, 2026", 64f, null, "Resting morning"),
-      TrendDataPoint("Oct 06", "Oct 06, 2026", 63f, null, "Cardio recovery day"),
-      TrendDataPoint("Oct 10", "Oct 10, 2026", 62f, null, "High HRV morning"),
-      TrendDataPoint("Oct 15", "Oct 15, 2026", 61f, null, "Resting state"),
-      TrendDataPoint("Oct 19", "Oct 19, 2026", 60f, null, "Excellent recovery"),
-      TrendDataPoint("Oct 23", "Oct 23, 2026", 59f, null, "Current resting heart rate")
-    )
+  val heartRatePoints = remember(profileId) {
+    when (profileId) {
+      "profile_maya" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 88f, null, "Pediatric resting HR"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 86f, null, "Normal 7yo heart rate"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 84f, null, "Clinic verified resting"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 85f, null, "Healthy pediatric pulse")
+      )
+      "profile_kwame" -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 64f, null, "Beta-blocker rate control"),
+        TrendDataPoint("Oct 03", "Oct 03, 2026", 62f, null, "Post-stent resting sinus rhythm"),
+        TrendDataPoint("Oct 12", "Oct 12, 2026", 60f, null, "Cardiology target rate"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 58f, null, "Controlled resting pulse")
+      )
+      else -> listOf(
+        TrendDataPoint("Sep 24", "Sep 24, 2026", 68f, null, "Resting baseline"),
+        TrendDataPoint("Sep 28", "Sep 28, 2026", 66f, null, "Post sleep check"),
+        TrendDataPoint("Oct 02", "Oct 02, 2026", 64f, null, "Resting morning"),
+        TrendDataPoint("Oct 06", "Oct 06, 2026", 63f, null, "Cardio recovery day"),
+        TrendDataPoint("Oct 10", "Oct 10, 2026", 62f, null, "High HRV morning"),
+        TrendDataPoint("Oct 15", "Oct 15, 2026", 61f, null, "Resting state"),
+        TrendDataPoint("Oct 19", "Oct 19, 2026", 60f, null, "Excellent recovery"),
+        TrendDataPoint("Oct 23", "Oct 23, 2026", 59f, null, "Current resting heart rate")
+      )
+    }
   }
 
   val convertedWeightPoints = remember(weightPoints, unitPreferences.weightUnit) {

@@ -51,6 +51,7 @@ object ClinicalOcrPipeline {
     uri: Uri? = null,
     bitmap: Bitmap? = null,
     sourceFileName: String,
+    targetProfileId: String = "profile_doug",
     onProgress: (OcrStepProgress) -> Unit
   ): ClinicalOcrResult = withContext(Dispatchers.IO) {
     val startTime = System.currentTimeMillis()
@@ -138,11 +139,11 @@ object ClinicalOcrPipeline {
 
     val timelineItem = HealthTimelineItem(
       id = "tl_ocr_${UUID.randomUUID().toString().take(8)}",
-      profileId = "profile_doug",
+      profileId = targetProfileId,
       category = TimelineCategory.LAB,
       title = title,
       subtitle = "$sourceFileName • Verified OCR Pipeline v3.0",
-      date = "Today",
+      date = SimpleDateFormat("MMM dd, yyyy", Locale.US).format(Date()),
       providerOrFacility = facility,
       status = overallStatus,
       clinicalNotes = notes,

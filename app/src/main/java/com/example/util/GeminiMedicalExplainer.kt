@@ -176,7 +176,7 @@ object GeminiMedicalExplainer {
       clinicalSignificance = parsedJson.optString("clinicalSignificance", "Used by your care team to monitor treatment progress and vital organ function."),
       referenceRangeGuidance = parsedJson.optString("referenceRangeGuidance", "Values should be evaluated alongside your overall symptoms and clinical history."),
       questionsToAskDoctor = if (questionsList.isNotEmpty()) questionsList else listOf("How does this result relate to my overall treatment plan?"),
-      modelUsed = "Gemini 3.5 Flash"
+      modelUsed = "Vitalith AI • Gemini 3.5 Flash"
     )
   }
 
@@ -194,7 +194,7 @@ object GeminiMedicalExplainer {
             "Does my recent decrease in A1c indicate that our current medication and lifestyle interventions are working?",
             "At what A1c threshold should we consider adjusting or tapering my Metformin dose?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -208,7 +208,7 @@ object GeminiMedicalExplainer {
             "Is my kidney function considered stable over my multi-year longitudinal history?",
             "Are there any specific medications or contrast dyes I should avoid given my current eGFR?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -222,7 +222,7 @@ object GeminiMedicalExplainer {
             "How does my hydration level affect my creatinine reading on test day?",
             "Do my exercise habits influence this muscle metabolite measurement?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -236,7 +236,7 @@ object GeminiMedicalExplainer {
             "Should I take Metformin before, during, or after my morning and evening meals?",
             "Do I need periodic Vitamin B12 checks, which are sometimes recommended with long-term Metformin use?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -250,7 +250,7 @@ object GeminiMedicalExplainer {
             "What is my target LDL cholesterol level on this current dose?",
             "Are there any food interactions (like grapefruit juice) or supplement cautions with Atorvastatin?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -264,7 +264,7 @@ object GeminiMedicalExplainer {
             "What morning blood pressure numbers indicate that my Lisinopril dose is optimal?",
             "Should I monitor potassium levels while taking an ACE inhibitor?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -278,7 +278,7 @@ object GeminiMedicalExplainer {
             "What time of day is best for measuring my resting baseline blood pressure?",
             "How does sodium intake and daily aerobic activity alter my diastolic readings?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -292,7 +292,7 @@ object GeminiMedicalExplainer {
             "How has my lipid profile changed since starting Atorvastatin?",
             "What dietary adjustments will most effectively support my HDL levels?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -306,7 +306,7 @@ object GeminiMedicalExplainer {
             "Is this allergy flag prominently visible to emergency care responders in my shared record?",
             "What specific alternatives should be documented on my emergency wallet card?"
           ),
-          modelUsed = "Gemini 3.5 Flash (Clinical Grounding)"
+          modelUsed = "Vitalith AI (Clinical Grounding)"
         )
       }
 
@@ -320,7 +320,7 @@ object GeminiMedicalExplainer {
             "What does this finding indicate regarding my current treatment plan?",
             "When should this measurement be re-evaluated?"
           ),
-          modelUsed = "Gemini 3.5 Flash"
+          modelUsed = "Vitalith AI • Gemini 3.5 Flash"
         )
       }
     }

@@ -4,20 +4,23 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.data.local.dao.AuditDao
-import com.example.data.local.dao.MedicationDao
-import com.example.data.local.dao.TimelineDao
-import com.example.data.local.entities.AuditLogEntity
-import com.example.data.local.entities.MedicationEntity
-import com.example.data.local.entities.TimelineItemEntity
+import com.example.data.local.dao.*
+import com.example.data.local.entities.*
 
 @Database(
   entities = [
     TimelineItemEntity::class,
     MedicationEntity::class,
-    AuditLogEntity::class
+    AuditLogEntity::class,
+    PatientProfileEntity::class,
+    MedicationReminderEntity::class,
+    CareGrantEntity::class,
+    PaymentTransactionEntity::class,
+    AppPreferenceEntity::class,
+    ChatMessageEntity::class,
+    SymptomEntity::class
   ],
-  version = 1,
+  version = 4,
   exportSchema = false
 )
 abstract class VitalithDatabase : RoomDatabase() {
@@ -25,6 +28,13 @@ abstract class VitalithDatabase : RoomDatabase() {
   abstract fun timelineDao(): TimelineDao
   abstract fun medicationDao(): MedicationDao
   abstract fun auditDao(): AuditDao
+  abstract fun patientProfileDao(): PatientProfileDao
+  abstract fun reminderDao(): ReminderDao
+  abstract fun careGrantDao(): CareGrantDao
+  abstract fun paymentDao(): PaymentDao
+  abstract fun appPreferenceDao(): AppPreferenceDao
+  abstract fun chatDao(): ChatDao
+  abstract fun symptomDao(): SymptomDao
 
   companion object {
     @Volatile

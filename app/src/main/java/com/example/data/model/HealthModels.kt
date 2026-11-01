@@ -151,6 +151,7 @@ data class Citation(
 
 data class ChatMessage(
   val id: String,
+  val profileId: String = "profile_doug",
   val sender: String, // "user", "ai", "system"
   val text: String,
   val timestamp: String,
@@ -198,7 +199,7 @@ enum class SubscriptionTier(
     displayName = "Vitalith Plus",
     monthlyPrice = 9.99,
     annualPricePerMonth = 7.49,
-    subtitle = "Unlimited Gemini AI, OCR engine & 5 family profiles",
+    subtitle = "Unlimited Vitalith AI, OCR engine & 5 family profiles",
     maxProfiles = 5,
     aiQueriesPerDay = 9999,
     ocrScansPerMonth = 9999,
@@ -246,4 +247,104 @@ data class PaymentTransaction(
   val transactionId: String get() = id
   val amount: Double get() = amountPaid
 }
+
+data class SymptomItem(
+  val id: String,
+  val profileId: String,
+  val symptomName: String,
+  val snomedCode: String = "",
+  val severity: Int, // 0..10
+  val severityLabel: String, // "Mild" (0-3), "Moderate" (4-6), "Severe" (7-10)
+  val onsetDate: String, // "Oct 29, 2026"
+  val onsetTimestamp: Long = System.currentTimeMillis(),
+  val endedDate: String? = null,
+  val endedTimestamp: Long? = null,
+  val isOngoing: Boolean = true,
+  val isIntermittent: Boolean = false,
+  val bodySite: String? = null,
+  val impact: List<String> = emptyList(), // "Work / Focus Limited", "Sleep Interrupted", "Bedridden"
+  val contextTags: List<String> = emptyList(), // "Poor Sleep (<6h)", "High Stress", "Skipped Meal", "Luteal Phase", "Post-Exercise", "Medication Taken"
+  val notes: String = "",
+  val mediaUris: List<String> = emptyList(),
+  val episodeId: String? = null,
+  val isRedFlag: Boolean = false,
+  val redFlagMessage: String? = null,
+  val provenance: Provenance = Provenance(
+    sourceSystem = "Patient Self-Report (Quick-Add)",
+    ingestedAt = "Just now",
+    confidenceScore = 1.0f,
+    consentState = "Patient-Owned / Private Vault"
+  )
+) {
+  val durationDisplay: String
+    get() {
+      if (isOngoing) return "Ongoing"
+      val end = endedTimestamp ?: return "Ongoing"
+      val diffMs = end - onsetTimestamp
+      if (diffMs <= 0) return "Point in time"
+      val hours = diffMs / (1000 * 60 * 60)
+      val mins = (diffMs / (1000 * 60)) % 60
+      return when {
+        hours >= 24 -> "${hours / 24}d ${hours % 24}h"
+        hours > 0 -> "${hours}h ${mins}m"
+        else -> "${mins}m"
+      }
+    }
+}
+
+data class SymptomDefinition(
+  val id: String,
+  val name: String,
+  val snomedCode: String,
+  val category: String, // "Neurological", "Digestive", "Musculoskeletal", "Respiratory", "Dermatological", "General"
+  val defaultBodySite: String? = null,
+  val isRedFlagCapable: Boolean = false
+)
+
+object SymptomCatalog {
+  val definitions = listOf(
+    SymptomDefinition("sym_migraine", "Migraine / Headache", "37796009", "Neurological", "Right Temple", isRedFlagCapable = true),
+    SymptomDefinition("sym_acid_reflux", "Acid Reflux / Heartburn", "698065", "Digestive", "Epigastric", isRedFlagCapable = false),
+    SymptomDefinition("sym_lower_back", "Lower Back Pain", "279039007", "Musculoskeletal", "Lumbar Spine", isRedFlagCapable = false),
+    SymptomDefinition("sym_joint_pain", "Joint Stiffness / Ache", "57676002", "Musculoskeletal", "Bilateral Knees", isRedFlagCapable = false),
+    SymptomDefinition("sym_fatigue", "Excessive Fatigue", "84229001", "General", "Whole Body", isRedFlagCapable = false),
+    SymptomDefinition("sym_nausea", "Nausea / Queasiness", "422587007", "Digestive", "Stomach", isRedFlagCapable = true),
+    SymptomDefinition("sym_skin_rash", "Skin Rash / Hives", "271807003", "Dermatological", "Arms / Torso", isRedFlagCapable = true),
+    SymptomDefinition("sym_chest_tightness", "Chest Pain / Tightness", "29857009", "Cardiovascular", "Mid-Chest", isRedFlagCapable = true),
+    SymptomDefinition("sym_dyspnea", "Shortness of Breath", "267036007", "Respiratory", "Chest / Lungs", isRedFlagCapable = true),
+    SymptomDefinition("sym_throat_tightness", "Throat Tightness / Swelling", "289138009", "Immunological", "Throat", isRedFlagCapable = true),
+    SymptomDefinition("sym_abdominal_cramp", "Abdominal Cramping / Pain", "21522001", "Digestive", "Lower Abdomen", isRedFlagCapable = true),
+    SymptomDefinition("sym_dizziness", "Dizziness / Lightheadedness", "404640003", "Neurological", "Head", isRedFlagCapable = true)
+  )
+}
+
+data class SymptomRecurrenceStats(
+  val symptomName: String,
+  val totalEpisodesThisMonth: Int,
+  val totalEpisodesLastMonth: Int,
+  val averageSeverity: Float,
+  val peakSeverity: Int,
+  val mostCommonContext: String?,
+  val coOccurrenceObservation: String?
+)
+
+data class RedFlagAlert(
+  val title: String,
+  val message: String,
+  val actionLabel: String,
+  val emergencyPhone: String = "911",
+  val isEmergency: Boolean = true
+)
+
+data class AppSettings(
+  val autoLockTimeout: String = "5 minutes",
+  val autoOcrProcessing: Boolean = true,
+  val drugConflictAlerts: Boolean = true,
+  val fhirSyncFrequency: String = "Real-Time",
+  val refillReminders: Boolean = true,
+  val labResultAlerts: Boolean = true,
+  val careGrantAlerts: Boolean = true,
+  val highContrastTheme: Boolean = false
+)
+
 

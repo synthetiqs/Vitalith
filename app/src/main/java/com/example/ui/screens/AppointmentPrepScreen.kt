@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.repository.VitalithRepository
+import com.example.ui.components.PatientProfileDropdownSelector
 import com.example.ui.theme.*
 import com.example.util.ClinicalPdfGenerator
 
@@ -28,13 +29,14 @@ fun AppointmentPrepScreen(
   repository: VitalithRepository,
   onNavigateBack: () -> Unit,
   onShareWithDoctor: () -> Unit,
+  onNavigateToProviderSearch: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
-  val userProfile by repository.userProfile.collectAsState()
-  val prep = remember(userProfile.unitPreferences) { repository.getAppointmentPrep(userProfile.unitPreferences) }
-  val profiles by repository.profiles.collectAsState()
   val currentProfileId by repository.currentProfileId.collectAsState()
+  val userProfile by repository.userProfile.collectAsState()
+  val prep = remember(userProfile.unitPreferences, currentProfileId) { repository.getAppointmentPrep(userProfile.unitPreferences) }
+  val profiles by repository.profiles.collectAsState()
   val currentProfile = remember(profiles, currentProfileId) {
     profiles.firstOrNull { it.id == currentProfileId } ?: profiles.firstOrNull()
   }
@@ -116,7 +118,22 @@ fun AppointmentPrepScreen(
             }
           }
 
-          Row {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            PatientProfileDropdownSelector(
+              profiles = profiles,
+              currentProfileId = currentProfileId,
+              onSwitchProfile = { repository.switchProfile(it) },
+              testTagPrefix = "prep_profile_selector"
+            )
+            IconButton(
+              onClick = onNavigateToProviderSearch,
+              modifier = Modifier.testTag("prep_search_providers_button")
+            ) {
+              Icon(imageVector = Icons.Default.Search, contentDescription = "Find Specialists", tint = VitalTealPrimary)
+            }
             IconButton(
               onClick = { exportAndSharePdf() },
               modifier = Modifier.testTag("export_prep_pdf_button")
@@ -157,12 +174,21 @@ fun AppointmentPrepScreen(
                   Text(text = prep.doctorName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                   Text(text = prep.clinic, color = Color(0xFFCBD5E1), fontSize = 12.sp)
                 }
+                val specialtyBadge = remember(prep) {
+                  when {
+                    prep.clinic.contains("Pediatric", ignoreCase = true) || prep.visitReason.contains("Pediatric", ignoreCase = true) || prep.visitReason.contains("Child", ignoreCase = true) -> "Pediatrics"
+                    prep.clinic.contains("Heart", ignoreCase = true) || prep.clinic.contains("Cardio", ignoreCase = true) || prep.visitReason.contains("Stent", ignoreCase = true) -> "Cardiology"
+                    prep.clinic.contains("Endocrin", ignoreCase = true) || prep.visitReason.contains("Diabetes", ignoreCase = true) || prep.visitReason.contains("A1c", ignoreCase = true) -> "Endocrinology"
+                    prep.clinic.contains("Nephro", ignoreCase = true) || prep.visitReason.contains("Kidney", ignoreCase = true) -> "Nephrology"
+                    else -> "Clinical Care"
+                  }
+                }
                 Surface(
                   color = VitalTealPrimary,
                   shape = RoundedCornerShape(4.dp)
                 ) {
                   Text(
-                    text = "Endocrinology",
+                    text = specialtyBadge,
                     color = Color.White,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -244,7 +270,7 @@ fun AppointmentPrepScreen(
               Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(imageVector = Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null, tint = VitalTealPrimary, modifier = Modifier.size(18.dp))
                 Text(
-                  text = "Recommended Questions for Dr. Chen",
+                  text = "Recommended Questions for ${prep.doctorName}",
                   fontSize = 13.sp,
                   fontWeight = FontWeight.Bold
                 )
@@ -324,7 +350,7 @@ fun AppointmentPrepScreen(
             ) {
               Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Export PDF Brief")
+              Text("Export PDF")
             }
             OutlinedButton(
               onClick = onShareWithDoctor,
@@ -333,7 +359,7 @@ fun AppointmentPrepScreen(
             ) {
               Icon(imageVector = Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Create 24h Link")
+              Text("Share Link")
             }
           }
         }

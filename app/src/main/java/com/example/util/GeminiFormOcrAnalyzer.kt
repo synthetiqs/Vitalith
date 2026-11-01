@@ -177,14 +177,14 @@ object GeminiFormOcrAnalyzer {
     val hash = computeSha256(extractedText.toByteArray(Charsets.UTF_8))
     delay(240)
 
-    onProgress(3, "Consulting Gemini AI clinical intelligence...")
+    onProgress(3, "Consulting Vitalith AI clinical intelligence...")
     val apiKey = runCatching { BuildConfig.GEMINI_API_KEY }.getOrDefault("")
 
     if (apiKey.isNotBlank() && !apiKey.contains("MY_GEMINI_API_KEY") && !apiKey.contains("YOUR_API_KEY")) {
       try {
         val geminiResult = callGeminiFormOcr(extractedText, rawImageBase64, apiKey, sourceName)
         if (geminiResult != null) {
-          onProgress(4, "Gemini AI clinical analysis complete! Populating form fields...")
+          onProgress(4, "Vitalith AI clinical analysis complete! Populating form fields...")
           delay(200)
           return@withContext geminiResult
         }
@@ -336,13 +336,13 @@ object GeminiFormOcrAnalyzer {
     val parsed = JSONObject(rawJson)
 
     val title = parsed.optString("title", "Clinical Lab Report")
-    val subtitle = parsed.optString("subtitle", "$sourceFileName • Gemini AI Analyzed")
+    val subtitle = parsed.optString("subtitle", "$sourceFileName • Vitalith AI Analyzed")
     val categoryStr = parsed.optString("category", "LAB")
     val category = runCatching { TimelineCategory.valueOf(categoryStr) }.getOrDefault(TimelineCategory.LAB)
     val provider = parsed.optString("providerOrFacility", "Clinical Diagnostic Hub")
     val statusStr = parsed.optString("status", "NORMAL")
     val status = runCatching { ItemStatus.valueOf(statusStr) }.getOrDefault(ItemStatus.NORMAL)
-    val notes = parsed.optString("clinicalNotes", "Clinical entity extracted via Gemini AI OCR analysis.")
+    val notes = parsed.optString("clinicalNotes", "Clinical entity extracted via Vitalith AI OCR analysis.")
 
     val tagsList = mutableListOf<String>()
     val tagsArray = parsed.optJSONArray("tags")
@@ -351,7 +351,7 @@ object GeminiFormOcrAnalyzer {
         tagsList.add(tagsArray.getString(i))
       }
     }
-    if (tagsList.isEmpty()) tagsList.addAll(listOf("OCR Ingested", "Gemini AI", "Clinical"))
+    if (tagsList.isEmpty()) tagsList.addAll(listOf("OCR Ingested", "Vitalith AI", "Clinical"))
 
     val biomarkersList = mutableListOf<ExtractedFormBiomarker>()
     val bArray = parsed.optJSONArray("biomarkers")
@@ -383,7 +383,7 @@ object GeminiFormOcrAnalyzer {
       biomarkers = biomarkersList,
       confidenceScore = confidence,
       sourceDocumentName = sourceFileName,
-      aiModelUsed = "Gemini 3.5 Flash Multimodal OCR"
+      aiModelUsed = "Vitalith Multimodal AI OCR"
     )
   }
 
